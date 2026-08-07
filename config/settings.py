@@ -1,33 +1,74 @@
 import os
+import sys
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
+from decouple import config
+import dj_database_url
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ['true', '1', 'yes']
+# Prefer DJANGO_DEBUG for deployment configuration; fall back to DEBUG for compatibility.
+DEBUG = os.getenv('DJANGO_DEBUG', os.getenv('DEBUG', 'True')).lower() in ['true', '1', 'yes']
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+# Use the explicit environment secret key if provided; fall back to a local dev key only when DEBUG=True.
+SECRET_KEY = config('SECRET_KEY', default='')
 if not SECRET_KEY:
     if DEBUG:
         SECRET_KEY = 'django-insecure-vetlink-kano-dev-key'
     else:
-        raise ImproperlyConfigured('The DJANGO_SECRET_KEY environment variable must be set in production.')
+        raise ImproperlyConfigured('The SECRET_KEY environment variable must be set in production.')
 
 allowed_hosts = os.getenv('ALLOWED_HOSTS')
 if allowed_hosts:
     ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
 else:
-    ALLOWED_HOSTS = ['localhost'] if DEBUG else []
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1'] if DEBUG else []
 
-CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
+if not ALLOWED_HOSTS and not DEBUG:
+    raise ImproperlyConfigured('The ALLOWED_HOSTS environment variable must be set in production.')
+
+#CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
+#CORS_ALLOW_CREDENTIALS = os.getenv('CORS_ALLOW_CREDENTIALS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
+]
+
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SECURE_CONTENT_TYPE_NOSNIFF = os.getenv('SECURE_CONTENT_TYPE_NOSNIFF', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SECURE_BROWSER_XSS_FILTER = os.getenv('SECURE_BROWSER_XSS_FILTER', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SECURE_REFERRER_POLICY = os.getenv('SECURE_REFERRER_POLICY', 'strict-origin-when-cross-origin')
+X_FRAME_OPTIONS = os.getenv('X_FRAME_OPTIONS', 'DENY')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# In production, the app should explicitly opt into permissive CORS and secure cookies.
+# Local development can use the default permissive settings without needing env vars.
+if not DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = False
 
 AUTH_USER_MODEL = 'accounts.User'
 
 INSTALLED_APPS = [
+    'daphne',  # must come before django.contrib.staticfiles for runserver WebSocket support
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -42,6 +83,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     'drf_spectacular',
+    'channels',
 
     # Local apps
     'apps.core',
@@ -60,6 +102,7 @@ INSTALLED_APPS = [
     'apps.clinical_notes',
     'apps.notifications',
     'apps.farmers',
+    'apps.chat',
 ]
 
 MIDDLEWARE = [
@@ -94,13 +137,42 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
-DATABASES = {
+# Channels channel layer. Redis when REDIS_URL is set (production); otherwise an
+# in-memory layer keeps local single-process development working out of the box.
+CHANNEL_LAYERS = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
 }
+
+REDIS_URL = os.getenv('REDIS_URL', '')
+if REDIS_URL:
+    CHANNEL_LAYERS['default'] = {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {'hosts': [REDIS_URL]},
+    }
+
+# Chat security constants
+MAX_UPLOAD_SIZE = int(os.getenv('CHAT_MAX_UPLOAD_SIZE', 8 * 1024 * 1024))  # 8 MB per file
+CHAT_ALLOWED_UPLOADS = (
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+    'video/mp4', 'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+)
+
+db_url = config("DATABASE_URL")
+DATABASES = {
+    "default": dj_database_url.parse(
+        db_url,
+        conn_max_age=600,
+        ssl_require=not DEBUG,
+    )
+}
+# if DATABASES["default"].get("ENGINE") == "django.db.backends.sqlite3":
+#     DATABASES["default"].pop("OPTIONS", None)
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -123,8 +195,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+# Values are configured above based on debug mode or explicit environment variables.
+# Default behavior: allow all origins during local development and disable in production.
 
 # Django REST Framework Settings
 REST_FRAMEWORK = {

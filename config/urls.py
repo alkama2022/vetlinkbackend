@@ -51,6 +51,7 @@ from apps.payments.views import (
     gateway_webhook,
     WithdrawalRequestViewSet,
 )
+from apps.chat.views import ChatContactsView, ConversationViewSet, MessageViewSet
 
 router = DefaultRouter()
 router.register(r'veterinarians', VeterinarianViewSet, basename='veterinarian')
@@ -83,6 +84,8 @@ router.register(r'payments/wallet', WalletViewSet, basename='wallet')
 router.register(r'payments/invoices', InvoiceViewSet, basename='payments-invoice')
 router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='withdrawal')
+router.register(r'chat/conversations', ConversationViewSet, basename='chat-conversation')
+router.register(r'chat/messages', MessageViewSet, basename='chat-message')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -101,6 +104,9 @@ urlpatterns = [
 
     # Surveillance KPIs & Analytics Endpoint
     path('api/v1/surveillance/kpis/', surveillance_kpis, name='surveillance_kpis'),
+
+    # Real-Time Chat
+    path('api/v1/chat/contacts/', ChatContactsView.as_view(), name='chat_contacts'),
 
     # REST Router API v1
     path('api/v1/', include(router.urls)),

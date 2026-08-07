@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: vetlink-backend
+    runtime: python
+    buildCommand: "./build.sh"
+    startCommand: "daphne config.asgi:application"

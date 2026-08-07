@@ -10,6 +10,7 @@ import json
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.utils import timezone
 
 from apps.chat.models import (
     Conversation,
@@ -101,16 +102,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
             presence.online_count += 1
         else:
             presence.online_count = max(0, presence.online_count - 1)
-        from django.utils import timezone as dj_timezone
-
+        update_fields = {'online_count'}
         if not online and presence.online_count == 0:
-            from django.utils import timezone as dj_timezone
-
-            presence.last_seen_at = dj_timezone.now()
-        update_fields = ['online_count']
-        if online_label_present(presence):
-            update_fields.append('last_seen_at')
-        presence.save(update_fields=update_fields)
+            presence.last_seen_at = timezone.now()
+            update_fields.add('last_seen_at')
+        presence.save(update_fields=list(update_fields))
         return presence
 
     # ── DB helpers ───────────────────────────────────────────────────────────

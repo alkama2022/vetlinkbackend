@@ -3,6 +3,8 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Count, Sum
 
@@ -46,6 +48,7 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
         return Response(DiseaseReportSerializer(report).data, status=status.HTTP_200_OK)
 
 
+@extend_schema(request=None, responses={200: OpenApiTypes.OBJECT})
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def surveillance_kpis(request):

@@ -10,7 +10,7 @@ def user_group(user_id):
     return f'user_{user_id}'
 
 
-def abroadcast_to_users(user_ids, event):
+async def abroadcast_to_users(user_ids, event):
     """Send an event dict to each user's personal channel group (async)."""
     layer = get_channel_layer()
     for uid in user_ids:
@@ -21,7 +21,7 @@ def broadcast_to_users(user_ids, event):
     async_to_sync(abroadcast_to_users)(user_ids, event)
 
 
-def abroadcast_presence(event):
+async def abroadcast_presence(event):
     layer = get_channel_layer()
     await layer.group_send(PRESENCE_GROUP, event)
 

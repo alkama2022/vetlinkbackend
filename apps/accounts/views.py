@@ -7,6 +7,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.throttling import ScopedRateThrottle
+from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
 
 from .models import User
 from .serializers import (
@@ -41,6 +43,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
+@extend_schema(request=ChangePasswordSerializer, responses={200: OpenApiTypes.OBJECT})
 class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -52,6 +55,7 @@ class ChangePasswordView(APIView):
         return Response({'detail': 'Password updated successfully.'}, status=status.HTTP_200_OK)
 
 
+@extend_schema(request=ForgotPasswordSerializer, responses={200: OpenApiTypes.OBJECT})
 class ForgotPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -70,6 +74,7 @@ class ForgotPasswordView(APIView):
         return Response({'detail': 'Password reset instructions were sent.'}, status=status.HTTP_200_OK)
 
 
+@extend_schema(request=ResetPasswordSerializer, responses={200: OpenApiTypes.OBJECT})
 class ResetPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -84,6 +89,7 @@ class ResetPasswordView(APIView):
         return Response({'detail': 'Password reset successful.'}, status=status.HTTP_200_OK)
 
 
+@extend_schema(request=VerifyEmailSerializer, responses={200: OpenApiTypes.OBJECT})
 class VerifyEmailView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -97,6 +103,7 @@ class VerifyEmailView(APIView):
         return Response({'detail': 'Email verified successfully.'}, status=status.HTTP_200_OK)
 
 
+@extend_schema(request=OpenApiTypes.OBJECT, responses={200: OpenApiTypes.OBJECT})
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

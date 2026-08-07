@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
@@ -32,19 +34,19 @@ class ChatUserBriefSerializer(serializers.ModelSerializer):
             'lga', 'avatar', 'initials', 'online', 'last_seen',
         ]
 
-    def get_initials(self, obj):
+    def get_initials(self, obj) -> str:
         return _initials(obj.full_name)
 
-    def get_user_type_label(self, obj):
+    def get_user_type_label(self, obj) -> str:
         return obj.get_user_type_display() if hasattr(obj, 'get_user_type_display') else obj.user_type
 
-    def get_online(self, obj):
+    def get_online(self, obj) -> bool:
         try:
             return obj.chat_presence.online_count > 0
         except Exception:
             return False
 
-    def get_last_seen(self, obj):
+    def get_last_seen(self, obj) -> Optional[str]:
         try:
             if obj.chat_presence.last_seen_at:
                 return obj.chat_presence.last_seen_at.isoformat()
@@ -61,13 +63,13 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
         model = MessageAttachment
         fields = ['id', 'url', 'filename', 'mime_type', 'size', 'kind', 'file_type']
 
-    def get_url(self, obj):
+    def get_url(self, obj) -> str:
         request = self.context.get('request')
         if obj.file:
             return request.build_absolute_uri(obj.file.url) if request else obj.file.url
         return ''
 
-    def get_file_type(self, obj):
+    def get_file_type(self, obj) -> str:
         return obj.kind or 'file'
 
 
@@ -85,7 +87,7 @@ class MessageSerializer(serializers.ModelSerializer):
             'attachments', 'read_by',
         ]
 
-    def get_read_by(self, obj):
+    def get_read_by(self, obj) -> List[str]:
         return [str(rid) for rid in obj.read_receipts.values_list('user_id', flat=True)]
 
 
@@ -114,10 +116,10 @@ class ConversationSerializer(serializers.ModelSerializer):
             'last_message', 'peers', 'unread_count',
         ]
 
-    def get_type(self, obj):
+    def get_type(self, obj) -> str:
         return obj.conversation_type
 
-    def get_peers(self, obj):
+    def get_peers(self, obj) -> List[Dict[str, Any]]:
         user = self.context['request'].user
         peers = [
             p.user
@@ -126,7 +128,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         ]
         return ChatUserBriefSerializer(peers, many=True, context=self.context).data
 
-    def get_last_message(self, obj):
+    def get_last_message(self, obj) -> Optional[Dict[str, Any]]:
         msg = obj.last_message
         if msg is None:
             return None
@@ -140,7 +142,7 @@ class ConversationSerializer(serializers.ModelSerializer):
             'has_attachment': msg.attachments.exists(),
         }
 
-    def get_unread_count(self, obj):
+    def get_unread_count(self, obj) -> int:
         user = self.context['request'].user
         participant = next(
             (p for p in obj.participants.all() if p.user_id == user.id), None

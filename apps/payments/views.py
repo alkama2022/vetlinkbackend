@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
 
 from .models import Wallet, WalletTransaction, Invoice, Payment, PaymentGateway, WithdrawalRequest, BankAccount, Receipt, FinancialAuditLog
 from .serializers import WalletSerializer, InvoiceSerializer, PaymentSerializer, WithdrawalRequestSerializer, BankAccountSerializer
@@ -89,6 +91,7 @@ class PaymentViewSet(viewsets.GenericViewSet):
         })
 
 
+@extend_schema(request=None, responses={200: OpenApiTypes.OBJECT})
 @api_view(['POST'])
 @permission_classes([])
 def gateway_webhook(request):
