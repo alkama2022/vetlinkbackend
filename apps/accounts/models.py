@@ -44,6 +44,7 @@ class User(AbstractUser):
         LAB_STAFF = 'LAB_STAFF', 'Laboratory Staff'
         PHARMACIST = 'PHARMACIST', 'Pharmacist'
         RECEPTIONIST = 'RECEPTIONIST', 'Receptionist'
+        INSURANCE_PROVIDER = 'INSURANCE_PROVIDER', 'Insurance Provider'
         GOVERNMENT_OFFICER = 'GOVERNMENT_OFFICER', 'Government Officer / Epidemiologist'
 
     username = None  # Use email as unique identifier

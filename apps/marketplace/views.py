@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, BasePermission
 from django.shortcuts import get_object_or_404
+from django.db import models
 from django.db.models import Count
 
 from .models import (
@@ -177,16 +178,15 @@ class MarketplaceReportViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[RolePermissionFactory(['SUPER_ADMIN','SYSTEM_ADMIN','CLINIC_ADMIN'])])
     def review(self, request, pk=None):
         report = self.get_object()
-        action = request.data.get('action')
-        if action == 'dismiss':
+        requested_action = request.data.get('action')
+        if requested_action == 'dismiss':
             report.status = 'dismissed'
         else:
             report.status = 'reviewed'
-            # optionally hide listing
+            # Hide the offending listing
             listing = report.listing
             listing.is_deleted = True
             listing.save()
-        report.reviewed_by = request.user
         report.save()
         return Response({'status': report.status})
 
@@ -201,6 +201,12 @@ class MarketplaceConversationViewSet(viewsets.ModelViewSet):
     queryset = MarketplaceConversation.objects.all()
     serializer_class = MarketplaceConversationSerializer
     permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        user = self.request.user
+        return self.queryset.filter(
+            models.Q(buyer=user) | models.Q(seller=user)
+        ).select_related('listing', 'buyer', 'seller')
 
     def perform_create(self, serializer):
         serializer.save()
