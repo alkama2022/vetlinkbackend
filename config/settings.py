@@ -14,8 +14,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Prefer DJANGO_DEBUG for deployment configuration; fall back to DEBUG for compatibility.
 DEBUG = os.getenv('DJANGO_DEBUG', os.getenv('DEBUG', 'True')).lower() in ['true', '1', 'yes']
 
-# Use the explicit environment secret key if provided; fall back to a local dev key only when DEBUG=True.
-SECRET_KEY = config('SECRET_KEY', default='')
+ # Use the explicit environment secret key if provided; support SECRET_KEY and DJANGO_SECRET_KEY.
+SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('DJANGO_SECRET_KEY') or config('SECRET_KEY', default='')
 if not SECRET_KEY:
     if DEBUG:
         SECRET_KEY = 'django-insecure-vetlink-kano-dev-key'
@@ -40,6 +40,10 @@ CORS_ALLOWED_ORIGINS = [
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
 ]
 
+extra_cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if extra_cors_origins:
+    CORS_ALLOWED_ORIGINS.extend([origin.strip() for origin in extra_cors_origins.split(',') if origin.strip()])
+
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
@@ -47,6 +51,10 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
 ]
+
+extra_csrf_origins = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+if extra_csrf_origins:
+    CSRF_TRUSTED_ORIGINS.extend([origin.strip() for origin in extra_csrf_origins.split(',') if origin.strip()])
 
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
