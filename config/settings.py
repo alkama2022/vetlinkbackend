@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -11,25 +10,33 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Prefer DJANGO_DEBUG for deployment configuration; fall back to DEBUG for compatibility.
-DEBUG = os.getenv('DJANGO_DEBUG', os.getenv('DEBUG', 'True')).lower() in ['true', '1', 'yes']
+DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in ['true', '1', 'yes']
+# DEBUG = os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"]
+# SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+# SECRET_KEY = config("SECRET_KEY")
+# if not SECRET_KEY:
+#     if DEBUG:
+#         SECRET_KEY = 'django-insecure-vetlink-kano-dev-key'
+#     else:
+#         raise ImproperlyConfigured('The DJANGO_SECRET_KEY environment variable must be set in production.')
 
- # Use the explicit environment secret key if provided; support SECRET_KEY and DJANGO_SECRET_KEY.
-SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('DJANGO_SECRET_KEY') or config('SECRET_KEY', default='')
-if not SECRET_KEY:
-    if DEBUG:
-        SECRET_KEY = 'django-insecure-vetlink-kano-dev-key'
-    else:
-        raise ImproperlyConfigured('The SECRET_KEY environment variable must be set in production.')
+SECRET_KEY = config(
+    "SECRET_KEY",
+    default="django-insecure-vetlink-kano-dev-key"
+)
 
-allowed_hosts = os.getenv('ALLOWED_HOSTS')
-if allowed_hosts:
-    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
-else:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1'] if DEBUG else []
+# allowed_hosts = os.getenv('ALLOWED_HOSTS')
+# if allowed_hosts:
+#     ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
+# else:
+#     ALLOWED_HOSTS = ['localhost', '127.0.0.1'] if DEBUG else []
 
-if not ALLOWED_HOSTS and not DEBUG:
-    raise ImproperlyConfigured('The ALLOWED_HOSTS environment variable must be set in production.')
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    ".onrender.com",
+]
+
 
 #CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
 #CORS_ALLOW_CREDENTIALS = os.getenv('CORS_ALLOW_CREDENTIALS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
@@ -38,11 +45,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
+    "https://vetlinkfrontendkan-coikas6hd-mevs-me.vercel.app",
 ]
-
-extra_cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
-if extra_cors_origins:
-    CORS_ALLOWED_ORIGINS.extend([origin.strip() for origin in extra_cors_origins.split(',') if origin.strip()])
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -50,11 +54,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
+    "https://vetlinkfrontendkan-coikas6hd-mevs-me.vercel.app",
 ]
-
-extra_csrf_origins = os.getenv('CSRF_TRUSTED_ORIGINS', '')
-if extra_csrf_origins:
-    CSRF_TRUSTED_ORIGINS.extend([origin.strip() for origin in extra_csrf_origins.split(',') if origin.strip()])
 
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
@@ -116,6 +117,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -171,16 +173,13 @@ CHAT_ALLOWED_UPLOADS = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 )
 
-db_url = config("DATABASE_URL")
 DATABASES = {
     "default": dj_database_url.parse(
-        db_url,
+        config("DATABASE_URL"),
         conn_max_age=600,
-        ssl_require=not DEBUG,
+        ssl_require=True,
     )
 }
-# if DATABASES["default"].get("ENGINE") == "django.db.backends.sqlite3":
-#     DATABASES["default"].pop("OPTIONS", None)
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -194,8 +193,13 @@ TIME_ZONE = 'Africa/Lagos'
 USE_I18N = True
 USE_TZ = True
 
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STATICFILES_STORAGE = (
+    "whitenoise.storage.CompressedManifestStaticFilesStorage"
+)
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+# STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
