@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -11,6 +12,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in ['true', '1', 'yes']
+# True when running the test runner (manage.py test / pytest).
+TESTING = 'test' in sys.argv[1:3] or 'PYTEST_CURRENT_TEST' in os.environ
 # DEBUG = os.getenv("DEBUG", "False").lower() in ["true", "1", "yes"]
 # SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 # SECRET_KEY = config("SECRET_KEY")
@@ -60,7 +63,7 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
 SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
-SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False' if (DEBUG or TESTING) else 'True').lower() in ['true', '1', 'yes']
 SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
 CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
 SECURE_CONTENT_TYPE_NOSNIFF = os.getenv('SECURE_CONTENT_TYPE_NOSNIFF', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
@@ -112,6 +115,7 @@ INSTALLED_APPS = [
     'apps.notifications',
     'apps.farmers',
     'apps.chat',
+    'apps.monitoring',
 ]
 
 MIDDLEWARE = [
@@ -126,6 +130,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Thread-local request middleware (for audit logging)
     'apps.core.middleware.ThreadLocalMiddleware',
+    # Monitoring: correlation IDs + request error/performance capture
+    'apps.monitoring.middleware.CorrelationIdMiddleware',
+    'apps.monitoring.middleware.RequestLoggingMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -177,7 +184,7 @@ DATABASES = {
     "default": dj_database_url.parse(
         config("DATABASE_URL"),
         conn_max_age=600,
-        ssl_require=True,
+        ssl_require=not config("DATABASE_URL").startswith("sqlite"),
     )
 }
 
@@ -263,6 +270,14 @@ REST_FRAMEWORK.setdefault('DEFAULT_THROTTLE_RATES', {
     'user': '1000/day',
     'auth': '5/min',
 })
+if TESTING:
+    # Tests make many authenticated/anonymous calls from one process, so the
+    # production rate limits would spuriously 429 the suite.
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
+        'anon': '100000/min',
+        'user': '1000000/day',
+        'auth': '100000/min',
+    }
 
 # SimpleJWT Settings
 SIMPLE_JWT = {
@@ -279,6 +294,66 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
+
+# ============================================================
+# MONITORING / OBSERVABILITY
+# ============================================================
+
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development' if DEBUG else 'production')
+
+MONITORING_SETTINGS = {
+    'ENVIRONMENT': ENVIRONMENT,
+    # Performance thresholds (ms)
+    'API_SLOW_WARNING_MS': int(os.getenv('API_SLOW_WARNING_MS', '2000')),
+    'API_SLOW_ERROR_MS': int(os.getenv('API_SLOW_ERROR_MS', '5000')),
+    # Retention windows (days)
+    'LOG_RETENTION_DAYS': int(os.getenv('LOG_RETENTION_DAYS', '180')),
+    'EVENT_RETENTION_DAYS': int(os.getenv('EVENT_RETENTION_DAYS', '365')),
+    # Alerting
+    'ALERT_MIN_SEVERITY': os.getenv('ALERT_MIN_SEVERITY', 'ERROR'),
+    # Ingestion guards
+    'MAX_MESSAGE_LENGTH': 4000,
+    'MAX_STACKTRACE_LENGTH': 8000,
+    # Intentional test-failure endpoint (dev/staging only)
+    'ALLOW_TEST_FAILURES': os.getenv('MONITORING_ALLOW_TEST_FAILURES', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes'],
+}
+
+# Centralized logging: JSON structured output in production, readable output in dev.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name} {module}: {message}',
+            'style': '{',
+        },
+        'json': {
+            '()': 'apps.monitoring.json_logging.JsonFormatter',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'json' if ENVIRONMENT == 'production' else 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO' if ENVIRONMENT == 'production' else 'DEBUG',
+    },
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+        'django.security': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        'django.db.backends': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+        'monitoring': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
+        'monitoring.alerts': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+    },
+}
+
+# Centralized error capture for DRF API errors
+REST_FRAMEWORK['EXCEPTION_HANDLER'] = \
+    'apps.monitoring.exception_handler.monitoring_exception_handler'
 
 FLUTTERWAVE_SECRET_KEY = os.getenv('FLUTTERWAVE_SECRET_KEY', '')
 FLUTTERWAVE_PUBLIC_KEY = os.getenv('FLUTTERWAVE_PUBLIC_KEY', '')

@@ -21,6 +21,9 @@ from .serializers import (
     VerifyEmailSerializer,
     VetLoginSerializer,
 )
+from rest_framework.exceptions import Throttled
+from apps.monitoring.models import LogCategory, LogSeverity, LogSource
+from apps.monitoring.services import capture_error, mark_request_logged, record_event
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -28,11 +31,77 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'auth'
 
+    def post(self, request, *args, **kwargs):
+        email = (request.data.get('email') or '').strip().lower()
+        response = None
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception as exc:
+            response = None
+            if isinstance(exc, Throttled):
+                # Rate-limit violation -> security event (do NOT treat as bad password).
+                capture_error(
+                    message='Login rate limit exceeded',
+                    severity=LogSeverity.WARNING,
+                    category=LogCategory.SECURITY,
+                    module='accounts.auth',
+                    source=LogSource.BACKEND,
+                    request=request,
+                    status_code=429,
+                    metadata={'email': email},
+                )
+                record_event(category='SECURITY', action='auth.rate_limited',
+                             target_type='user', target_id=email, request=request,
+                             details={'email': email})
+                mark_request_logged(request)
+                raise
+            self._log_failure(request, email)
+            raise
+        if response is not None and response.status_code != 200:
+            self._log_failure(request, email)
+        elif response is not None:
+            actor = User.objects.filter(email=email).first()
+            record_event(
+                category='AUTH', action='auth.login',
+                actor=actor, target_type='user',
+                target_id=str(actor.id) if actor else email,
+                request=request,
+            )
+        return response
+
+    def _log_failure(self, request, email):
+        # Failed login -> security event + error log (email only, NEVER the password).
+        capture_error(
+            message='Authentication failed',
+            severity=LogSeverity.WARNING,
+            category=LogCategory.AUTH,
+            module='accounts.auth',
+            source=LogSource.BACKEND,
+            request=request,
+            status_code=401,
+            metadata={'email': email},
+        )
+        record_event(
+            category='SECURITY', action='auth.login_failed',
+            target_type='user', target_id=email,
+            request=request, details={'email': email},
+        )
+        mark_request_logged(request)
+
 
 class UserRegistrationView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        record_event(
+            category='ACCOUNT', action='account.registered',
+            actor=user, target_type='user', target_id=str(user.id),
+            request=self.request,
+            details={'email': user.email, 'user_type': user.user_type},
+        )
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
@@ -52,6 +121,10 @@ class ChangePasswordView(APIView):
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data['new_password'])
         request.user.save(update_fields=['password'])
+        record_event(
+            category='ACCOUNT', action='account.password_changed',
+            actor=request.user, request=request,
+        )
         return Response({'detail': 'Password updated successfully.'}, status=status.HTTP_200_OK)
 
 
@@ -70,6 +143,10 @@ class ForgotPasswordView(APIView):
             'noreply@vetlink.local',
             [user.email],
             fail_silently=True,
+        )
+        record_event(
+            category='ACCOUNT', action='account.password_reset_requested',
+            target_type='user', target_id=str(user.id), request=request,
         )
         return Response({'detail': 'Password reset instructions were sent.'}, status=status.HTTP_200_OK)
 
@@ -114,6 +191,10 @@ class LogoutView(APIView):
             token.blacklist()
         except Exception:
             pass
+        record_event(
+            category='AUTH', action='auth.logout',
+            actor=request.user, request=request,
+        )
         return Response({'detail': 'Logged out successfully.'}, status=status.HTTP_200_OK)
 
 
@@ -121,4 +202,31 @@ class VetLoginView(TokenObtainPairView):
     serializer_class = VetLoginSerializer
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'auth'
+
+    def post(self, request, *args, **kwargs):
+        response = None
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception as exc:
+            response = None
+            self._log_failure(request)
+            raise
+        if response is not None and response.status_code != 200:
+            self._log_failure(request)
+        elif response is not None:
+            record_event(category='AUTH', action='auth.vet_login', request=request)
+        return response
+
+    def _log_failure(self, request):
+        capture_error(
+            message='Veterinarian authentication failed',
+            severity=LogSeverity.WARNING,
+            category=LogCategory.AUTH,
+            module='accounts.vet_auth',
+            source=LogSource.BACKEND,
+            request=request,
+            status_code=401,
+        )
+        record_event(category='SECURITY', action='auth.vet_login_failed', request=request)
+        mark_request_logged(request)
 

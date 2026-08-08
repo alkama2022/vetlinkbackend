@@ -53,6 +53,15 @@ from apps.payments.views import (
     BankAccountViewSet,
 )
 from apps.chat.views import ChatContactsView, ConversationViewSet, MessageViewSet
+from apps.monitoring.views import (
+    AlertViewSet,
+    ErrorLogViewSet,
+    IncidentViewSet,
+    MonitoringDashboardView,
+    SystemEventViewSet,
+    TestFailureView,
+)
+from apps.monitoring.health import health_live, health_ready, health_summary
 
 router = DefaultRouter()
 router.register(r'veterinarians', VeterinarianViewSet, basename='veterinarian')
@@ -88,6 +97,10 @@ router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='wit
 router.register(r'payments/bank-accounts', BankAccountViewSet, basename='bank-account')
 router.register(r'chat/conversations', ConversationViewSet, basename='chat-conversation')
 router.register(r'chat/messages', MessageViewSet, basename='chat-message')
+router.register(r'monitoring/errors', ErrorLogViewSet, basename='monitoring-error')
+router.register(r'monitoring/incidents', IncidentViewSet, basename='monitoring-incident')
+router.register(r'monitoring/events', SystemEventViewSet, basename='monitoring-event')
+router.register(r'monitoring/alerts', AlertViewSet, basename='monitoring-alert')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -109,6 +122,20 @@ urlpatterns = [
 
     # Real-Time Chat
     path('api/v1/chat/contacts/', ChatContactsView.as_view(), name='chat_contacts'),
+
+    # Monitoring & Observability
+    path('api/v1/monitoring/dashboard/', MonitoringDashboardView.as_view(),
+         name='monitoring_dashboard'),
+    path('api/v1/monitoring/test-failure/', TestFailureView.as_view(),
+         name='monitoring_test_failure'),
+
+    # Health checks
+    path('health/', health_summary, name='health'),
+    path('health/live/', health_live, name='health_live'),
+    path('health/ready/', health_ready, name='health_ready'),
+    path('api/v1/health/', health_summary, name='health_api'),
+    path('api/v1/health/live/', health_live, name='health_live_api'),
+    path('api/v1/health/ready/', health_ready, name='health_ready_api'),
 
     # REST Router API v1
     path('api/v1/', include(router.urls)),
