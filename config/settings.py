@@ -206,6 +206,20 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+# ============================================================
+# STATIC FILES
+# ============================================================
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 # CORS Settings
 # Values are configured above based on debug mode or explicit environment variables.
 # Default behavior: allow all origins during local development and disable in production.
