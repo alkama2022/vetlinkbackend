@@ -46,6 +46,7 @@ class CategoryTests(TestCase):
 
     def test_categories_are_read_only(self):
         """Categories cannot be created via the API (ReadOnlyModelViewSet)."""
+        self.client.force_authenticate(user=make_user())
         response = self.client.post(self.url, {"name": "Equipment", "slug": "equipment"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
@@ -130,7 +131,9 @@ class ListingCRUDTests(TestCase):
         listing.is_deleted = True
         listing.save()
         response = self.client.get(self.url)
-        ids = [item["id"] for item in (response.data.get("results") or response.data)]
+        payload = response.data
+        results = payload.get("results") if isinstance(payload, dict) else payload
+        ids = [str(item["id"]) for item in (results or [])]
         self.assertNotIn(str(listing.id), ids)
 
     def test_create_listing_unauthenticated(self):
