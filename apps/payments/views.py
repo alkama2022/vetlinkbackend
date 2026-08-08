@@ -20,10 +20,25 @@ class WalletViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = WalletSerializer
     permission_classes = (IsAuthenticated,)
 
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
     def get_object(self):
         # always return current user's wallet
         wallet, _ = Wallet.objects.get_or_create(user=self.request.user)
         return wallet
+
+
+class BankAccountViewSet(viewsets.ModelViewSet):
+    queryset = BankAccount.objects.all()
+    serializer_class = BankAccountSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user, verified=True)
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):

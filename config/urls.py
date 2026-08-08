@@ -50,6 +50,7 @@ from apps.payments.views import (
     PaymentViewSet,
     gateway_webhook,
     WithdrawalRequestViewSet,
+    BankAccountViewSet,
 )
 from apps.chat.views import ChatContactsView, ConversationViewSet, MessageViewSet
 
@@ -84,6 +85,7 @@ router.register(r'payments/wallet', WalletViewSet, basename='wallet')
 router.register(r'payments/invoices', InvoiceViewSet, basename='payments-invoice')
 router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='withdrawal')
+router.register(r'payments/bank-accounts', BankAccountViewSet, basename='bank-account')
 router.register(r'chat/conversations', ConversationViewSet, basename='chat-conversation')
 router.register(r'chat/messages', MessageViewSet, basename='chat-message')
 
