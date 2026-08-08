@@ -47,6 +47,9 @@ ALLOWED_HOSTS = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+
+    # Production Vercel frontends
+    "https://alkama2022-vetlinkfrontendkano.vercel.app",
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
     "https://vetlinkfrontendkan-coikas6hd-mevs-me.vercel.app",
 ]
@@ -56,10 +59,12 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+
+    # Production Vercel frontends
+    "https://alkama2022-vetlinkfrontendkano.vercel.app",
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
     "https://vetlinkfrontendkan-coikas6hd-mevs-me.vercel.app",
 ]
-
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
 SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
