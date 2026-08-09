@@ -49,6 +49,7 @@ class MarketplaceCommentSerializer(serializers.ModelSerializer):
 
 class MarketplaceListingSerializer(serializers.ModelSerializer):
     seller = serializers.StringRelatedField(read_only=True)
+    seller_id = serializers.UUIDField(read_only=True)
     images = MarketplaceImageSerializer(many=True, read_only=True)
     videos = MarketplaceVideoSerializer(many=True, read_only=True)
     documents = MarketplaceDocumentSerializer(many=True, read_only=True)
@@ -59,7 +60,7 @@ class MarketplaceListingSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketplaceListing
         fields = (
-            'id', 'seller', 'title', 'category', 'description', 'price', 'negotiable', 'quantity', 'unit', 'condition', 'status',
+            'id', 'seller', 'seller_id', 'title', 'category', 'description', 'price', 'negotiable', 'quantity', 'unit', 'condition', 'status',
             'location', 'contact_preference', 'delivery_options', 'tags', 'images', 'videos', 'documents', 'created_at', 'updated_at',
             'comments_count', 'reactions_count', 'bookmarks_count'
         )

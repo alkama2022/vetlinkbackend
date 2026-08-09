@@ -46,7 +46,7 @@ from apps.marketplace.views import (
 )
 from apps.payments.views import (
     WalletViewSet,
-    InvoiceViewSet,
+    InvoiceViewSet as PaymentInvoiceViewSet,
     PaymentViewSet,
     gateway_webhook,
     WithdrawalRequestViewSet,
@@ -91,7 +91,7 @@ router.register(r'marketplace/categories', MarketplaceCategoryViewSet, basename=
 router.register(r'marketplace/conversations', MarketplaceConversationViewSet, basename='marketplace-conversation')
 router.register(r'marketplace/messages', MarketplaceMessageViewSet, basename='marketplace-message')
 router.register(r'payments/wallet', WalletViewSet, basename='wallet')
-router.register(r'payments/invoices', InvoiceViewSet, basename='payments-invoice')
+router.register(r'payments/invoices', PaymentInvoiceViewSet, basename='payments-invoice')
 router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='withdrawal')
 router.register(r'payments/bank-accounts', BankAccountViewSet, basename='bank-account')

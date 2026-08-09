@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from django.shortcuts import get_object_or_404
 from django.db import models
 from django.db.models import Count
+from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import (
     MarketplaceListing,
@@ -63,9 +64,20 @@ class MarketplaceListingViewSet(viewsets.ModelViewSet):
     )
     serializer_class = MarketplaceListingSerializer
     permission_classes = (IsOwnerOrReadOnly,)
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['seller_id', 'status', 'category']
     search_fields = ['title', 'description', 'tags']
     ordering_fields = ['created_at', 'price']
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def mine(self, request):
+        listings = self.get_queryset().filter(seller=request.user)
+        page = self.paginate_queryset(listings)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(listings, many=True)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         # Serializer.create handles assigning `seller` from the request context.

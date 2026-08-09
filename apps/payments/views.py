@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from drf_spectacular.types import OpenApiTypes
 
@@ -143,6 +144,15 @@ def gateway_webhook(request):
         invoice = payment.invoice
         invoice.status = 'paid'
         invoice.save()
+
+        # Mark the originating clinic invoice as paid when this payment
+        # came through the billing checkout flow.
+        billing_invoice_id = payment.metadata.get('billing_invoice')
+        if billing_invoice_id:
+            from apps.billing.models import Invoice as BillingInvoice
+            BillingInvoice.objects.filter(id=billing_invoice_id, status='Unpaid').update(
+                status='Paid', paid_at=timezone.now()
+            )
 
         vet = invoice.veterinarian
         if vet:
