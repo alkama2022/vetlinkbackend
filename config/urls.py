@@ -30,6 +30,7 @@ from apps.community.views import (
     CommunityPostViewSet,
     CommunityCommentViewSet,
     CommunityReactionViewSet,
+    CommunityBookmarkViewSet,
     CommunityReportViewSet,
     CommunityCategoryViewSet,
     CommunityTagViewSet,
@@ -79,6 +80,7 @@ router.register(r'farmers/reminders', FarmerReminderViewSet, basename='farmer-re
 router.register(r'community/posts', CommunityPostViewSet, basename='community-post')
 router.register(r'community/comments', CommunityCommentViewSet, basename='community-comment')
 router.register(r'community/reactions', CommunityReactionViewSet, basename='community-reaction')
+router.register(r'community/bookmarks', CommunityBookmarkViewSet, basename='community-bookmark')
 router.register(r'community/reports', CommunityReportViewSet, basename='community-report')
 router.register(r'community/categories', CommunityCategoryViewSet, basename='community-category')
 router.register(r'community/tags', CommunityTagViewSet, basename='community-tag')

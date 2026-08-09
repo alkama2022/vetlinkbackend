@@ -60,6 +60,33 @@ class CommunityReactionViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
+class CommunityBookmarkViewSet(viewsets.ModelViewSet):
+    queryset = CommunityBookmark.objects.select_related('user', 'post').order_by('id')
+    serializer_class = CommunityBookmarkSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        return super().get_queryset().filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        post_id = request.data.get('post')
+        if not post_id:
+            return Response({'detail': 'post is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            post = CommunityPost.objects.get(pk=post_id)
+        except CommunityPost.DoesNotExist:
+            return Response({'detail': 'Post not found.'}, status=status.HTTP_404_NOT_FOUND)
+        bookmark, created = CommunityBookmark.objects.get_or_create(user=request.user, post=post)
+        if not created:
+            bookmark.delete()
+            return Response({'bookmarked': False}, status=status.HTTP_200_OK)
+        return Response(
+            CommunityBookmarkSerializer(bookmark, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class CommunityReportViewSet(viewsets.ModelViewSet):
     queryset = CommunityReport.objects.select_related('reporter', 'post').order_by('-created_at')
     serializer_class = CommunityReportSerializer
