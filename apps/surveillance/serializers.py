@@ -5,7 +5,8 @@ from .models import DiseaseReport
 class DiseaseReportSerializer(serializers.ModelSerializer):
     submittedAt = serializers.DateTimeField(source='submitted_at', read_only=True)
     farmerName = serializers.CharField(source='farmer_name', required=False, allow_blank=True)
-    alertStatus = serializers.CharField(source='alert_status')
+    alertStatus = serializers.CharField(source='alert_status', required=False)
+    lga = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = DiseaseReport
@@ -14,7 +15,7 @@ class DiseaseReportSerializer(serializers.ModelSerializer):
             'location', 'lga', 'coords', 'notes', 'photos', 'submittedAt', 'farmerName',
             'alertStatus', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'submittedAt', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'photos', 'submittedAt', 'created_at', 'updated_at']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

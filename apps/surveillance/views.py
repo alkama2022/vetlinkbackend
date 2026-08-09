@@ -43,6 +43,7 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
     queryset = DiseaseReport.objects.all().order_by('-submitted_at')
     serializer_class = DiseaseReportSerializer
     permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'report_code'
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['alert_status', 'species', 'lga']
     search_fields = ['report_code', 'disease', 'species', 'location', 'lga', 'farmer_name']
