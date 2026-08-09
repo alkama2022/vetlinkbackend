@@ -22,6 +22,7 @@ class DiseaseReport(TimeStampedModel):
     lga = models.CharField(max_length=100, db_index=True) # Extracted LGA name e.g. Dawakin Kudu
     coords = models.CharField(max_length=100, blank=True, default='') # GPS Coordinates e.g. "11.8500, 8.6167"
     notes = models.TextField(blank=True, default='')
+    photos = models.JSONField(default=list, blank=True)  # Stored relative paths of evidence photos/videos
     submitted_at = models.DateTimeField(default=timezone.now)
     farmer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='disease_reports')
     farmer_name = models.CharField(max_length=255, blank=True, default='')

@@ -1,6 +1,12 @@
+import os
 import random
+import uuid
+from datetime import date
+
+from django.conf import settings
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -11,6 +17,26 @@ from django.db.models import Count, Sum
 from .models import DiseaseReport
 from .serializers import DiseaseReportSerializer, ReportStatusUpdateSerializer
 from apps.core.permissions import IsGovernmentOfficerOrAdmin
+
+ALLOWED_PHOTO_TYPES = ('image/', 'video/')
+MAX_UPLOAD_SIZE = getattr(settings, 'MAX_UPLOAD_SIZE', 8 * 1024 * 1024)
+
+
+def _save_report_photo(uploaded):
+    content_type = getattr(uploaded, 'content_type', '')
+    if not any(content_type.startswith(t) for t in ALLOWED_PHOTO_TYPES):
+        raise ValidationError({'photos': f'File "{uploaded.name}" is not an allowed type.'})
+    if uploaded.size > MAX_UPLOAD_SIZE:
+        raise ValidationError({'photos': f'File "{uploaded.name}" exceeds the size limit.'})
+    subdir = f"uploads/disease_reports/{date.today().strftime('%Y/%m/%d')}"
+    directory = os.path.join(settings.MEDIA_ROOT, subdir)
+    os.makedirs(directory, exist_ok=True)
+    ext = os.path.splitext(uploaded.name)[1][:10].lower()
+    filename = f"{uuid.uuid4().hex}{ext}"
+    with open(os.path.join(directory, filename), 'wb') as dest:
+        for chunk in uploaded.chunks():
+            dest.write(chunk)
+    return f"{subdir}/{filename}"
 
 
 class DiseaseReportViewSet(viewsets.ModelViewSet):
@@ -29,6 +55,10 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
             loc = serializer.validated_data.get('location')
             lga = loc.split(',')[0].strip()
         extra = {'report_code': report_code, 'lga': lga or 'Kano Municipal'}
+        photos = self.request.FILES.getlist('photos')
+        if photos:
+            saved = [_save_report_photo(uploaded) for uploaded in photos]
+            extra['photos'] = (serializer.validated_data.get('photos') or []) + saved
         user = getattr(self.request, 'user', None)
         if user and getattr(user, 'is_authenticated', False):
             # Associate the submitting user when possible
