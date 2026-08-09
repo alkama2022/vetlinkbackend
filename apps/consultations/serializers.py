@@ -20,10 +20,10 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
 
 class ConsultationRequestSerializer(serializers.ModelSerializer):
-    farmerName = serializers.CharField(source='farmer_name')
-    farmLocation = serializers.CharField(source='farm_location')
-    vetId = serializers.CharField(source='vet_id_str')
-    vetName = serializers.CharField(source='vet_name')
+    farmerName = serializers.CharField(source='farmer_name', required=False, allow_blank=True)
+    farmLocation = serializers.CharField(source='farm_location', required=False, allow_blank=True)
+    vetId = serializers.CharField(source='vet_id_str', required=False, allow_blank=True)
+    vetName = serializers.CharField(source='vet_name', required=False, allow_blank=True)
     diseaseName = serializers.CharField(source='disease_name', required=False, allow_blank=True)
     symptomsEn = serializers.CharField(source='symptoms_en', required=False, allow_blank=True)
     symptomsHa = serializers.CharField(source='symptoms_ha', required=False, allow_blank=True)
@@ -50,6 +50,13 @@ class ConsultationRequestSerializer(serializers.ModelSerializer):
             'submittedAt', 'acceptedAt', 'resolvedAt', 'messages'
         ]
         read_only_fields = ['id', 'submittedAt', 'messages']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not validated_data.get('farmer_name') and user:
+            validated_data['farmer_name'] = getattr(user, 'full_name', '')
+        return super().create(validated_data)
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

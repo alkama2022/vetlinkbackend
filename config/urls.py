@@ -153,3 +153,7 @@ urlpatterns = [
 if settings.DEBUG:
     from django.conf.urls.static import static
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# TEMP REPRO - REMOVE AFTER DEBUGGING
+from apps.core.repro_views import slow_view  # noqa: E402
+urlpatterns += [path('repro/slow/', slow_view, name='repro_slow')]

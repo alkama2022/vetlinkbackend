@@ -13,11 +13,11 @@ class LabSampleSerializer(serializers.ModelSerializer):
     class Meta:
         model = LabSample
         fields = [
-            'id', 'species', 'test', 'facility', 'status', 'priority',
+            'id', 'sample_code', 'species', 'test', 'facility', 'status', 'priority',
             'dateReceived', 'patientId', 'requestedBy', 'resultFindings',
             'resultPositive', 'publishedAt', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'publishedAt', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'sample_code', 'publishedAt', 'created_at', 'updated_at']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

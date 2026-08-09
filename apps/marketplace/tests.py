@@ -17,7 +17,7 @@ def make_user(email="seller@market.ng", password="marketpass123", **kwargs):
 
 
 def make_category(name="Livestock", slug="livestock"):
-    return MarketplaceCategory.objects.create(name=name, slug=slug)
+    return MarketplaceCategory.objects.get_or_create(name=name, slug=slug)[0]
 
 
 def make_listing(seller, category=None, **kwargs):

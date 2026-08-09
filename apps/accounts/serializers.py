@@ -23,21 +23,41 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 
+PUBLIC_REGISTERABLE_ROLE = User.UserType.FARMER
+
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
 
     class Meta:
         model = User
         fields = ['id', 'email', 'password', 'full_name', 'phone_number', 'user_type', 'lga', 'address', 'avatar']
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'user_type']
+
+    def validate_user_type(self, value):
+        if value != PUBLIC_REGISTERABLE_ROLE:
+            raise serializers.ValidationError(
+                f'Public registration is only available for {PUBLIC_REGISTERABLE_ROLE} accounts.'
+            )
+        return value
+
+    def validate(self, attrs):
+        if 'user_type' in self.initial_data:
+            requested = self.initial_data.get('user_type')
+            if requested != PUBLIC_REGISTERABLE_ROLE:
+                raise serializers.ValidationError(
+                    {'user_type': f'Public registration is only available for {PUBLIC_REGISTERABLE_ROLE} accounts.'}
+                )
+        return attrs
 
     def create(self, validated_data):
+        validated_data['user_type'] = PUBLIC_REGISTERABLE_ROLE
         user = User.objects.create_user(
             email=validated_data['email'],
             password=validated_data['password'],
             full_name=validated_data['full_name'],
             phone_number=validated_data.get('phone_number', ''),
-            user_type=validated_data.get('user_type', User.UserType.FARMER),
+            user_type=validated_data['user_type'],
             lga=validated_data.get('lga', 'Kano Municipal'),
             address=validated_data.get('address', ''),
             avatar=validated_data.get('avatar', ''),
@@ -54,7 +74,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'email', 'full_name', 'phone_number', 'user_type', 'lga', 'address', 'avatar', 'is_email_verified', 'created_at']
-        read_only_fields = ['id', 'email', 'created_at', 'is_email_verified']
+        read_only_fields = ['id', 'email', 'user_type', 'created_at', 'is_email_verified']
+
+    def validate(self, attrs):
+        if 'user_type' in self.initial_data:
+            raise serializers.ValidationError(
+                {'user_type': 'Changing your account role is not allowed.'}
+            )
+        return attrs
 
 
 class ChangePasswordSerializer(serializers.Serializer):

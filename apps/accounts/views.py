@@ -12,6 +12,7 @@ from drf_spectacular.types import OpenApiTypes
 
 from .models import User
 from .serializers import (
+    PUBLIC_REGISTERABLE_ROLE,
     ChangePasswordSerializer,
     CustomTokenObtainPairSerializer,
     ForgotPasswordSerializer,
@@ -94,14 +95,27 @@ class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
+        requested_role = (request.data.get('user_type') or '').strip().upper()
+        if requested_role and requested_role != PUBLIC_REGISTERABLE_ROLE:
+            return Response(
+                {'user_type': f'Public registration is only available for {PUBLIC_REGISTERABLE_ROLE} accounts.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         user = serializer.save()
         record_event(
             category='ACCOUNT', action='account.registered',
             actor=user, target_type='user', target_id=str(user.id),
-            request=self.request,
+            request=request,
             details={'email': user.email, 'user_type': user.user_type},
         )
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        user = serializer.save()
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):

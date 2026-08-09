@@ -69,7 +69,7 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
         serializer.save(**extra)
 
     @action(detail=True, methods=['patch'], url_path='status', permission_classes=[IsGovernmentOfficerOrAdmin])
-    def update_status(self, request, pk=None):
+    def update_status(self, request, report_code=None):
         report = self.get_object()
         serializer = ReportStatusUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

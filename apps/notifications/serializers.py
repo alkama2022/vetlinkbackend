@@ -8,7 +8,7 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'notif_code', 'title', 'body', 'tone', 'read', 'createdAt']
-        read_only_fields = ['id', 'createdAt']
+        read_only_fields = ['id', 'notif_code', 'createdAt']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

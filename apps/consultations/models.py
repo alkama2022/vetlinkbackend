@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from apps.core.models import TimeStampedModel
 from apps.veterinarians.models import VeterinarianProfile
+from apps.accounts.models import User
 
 
 class ConsultationRequest(TimeStampedModel):
@@ -23,6 +24,7 @@ class ConsultationRequest(TimeStampedModel):
         CRITICAL = 'Critical', 'Critical'
 
     consultation_code = models.CharField(max_length=30, unique=True, db_index=True) # e.g. CON001
+    farmer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='consultation_requests')
     farmer_name = models.CharField(max_length=255)
     farm_location = models.CharField(max_length=255)
     vet = models.ForeignKey(VeterinarianProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='consultation_requests')

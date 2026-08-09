@@ -13,7 +13,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
             'ownerName', 'animal', 'reason', 'notes', 'status',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'appointment_code', 'created_at', 'updated_at']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
@@ -21,10 +21,3 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if instance.patient:
             ret['patientId'] = instance.patient.patient_code
         return ret
-
-    def create(self, validated_data):
-        patient_id_str = validated_data.get('patient_id_str', '')
-        if not validated_data.get('appointment_code'):
-            import time
-            validated_data['appointment_code'] = f"A{str(int(time.time()))[-6:]}"
-        return super().create(validated_data)

@@ -15,7 +15,7 @@ class CaseNoteSerializer(serializers.ModelSerializer):
             'vetName', 'diagnosis', 'treatment', 'followUpDate', 'notes',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'note_code', 'created_at', 'updated_at']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

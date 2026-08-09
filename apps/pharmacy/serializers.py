@@ -10,7 +10,7 @@ class DrugStockSerializer(serializers.ModelSerializer):
     class Meta:
         model = DrugStock
         fields = ['id', 'drug_code', 'name', 'category', 'quantity', 'unit', 'reorderLevel', 'expiryDate', 'unitCost', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'drug_code', 'created_at', 'updated_at']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)

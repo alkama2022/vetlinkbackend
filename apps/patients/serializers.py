@@ -16,7 +16,7 @@ class PatientSerializer(serializers.ModelSerializer):
             'id', 'patient_code', 'ownerName', 'ownerPhone', 'lga',
             'species', 'animalName', 'animalAge', 'createdAt'
         ]
-        read_only_fields = ['id', 'createdAt']
+        read_only_fields = ['id', 'patient_code', 'createdAt']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
