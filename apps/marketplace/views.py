@@ -207,6 +207,7 @@ class MarketplaceCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MarketplaceCategory.objects.all()
     serializer_class = MarketplaceCategorySerializer
     permission_classes = (IsAuthenticatedOrReadOnly,)
+    pagination_class = None
 
 
 class MarketplaceConversationViewSet(viewsets.ModelViewSet):

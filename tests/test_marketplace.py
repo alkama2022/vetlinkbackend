@@ -1,11 +1,32 @@
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+import io
 from rest_framework import status
 from rest_framework.test import APITestCase
+from PIL import Image
 
-from apps.marketplace.models import MarketplaceBookmark, MarketplaceListing
+from apps.marketplace.models import MarketplaceBookmark, MarketplaceCategory, MarketplaceImage, MarketplaceListing
 
 
 User = get_user_model()
+
+
+class MarketplaceCategoryTests(APITestCase):
+    def setUp(self):
+        MarketplaceCategory.objects.get_or_create(name="Livestock", slug="livestock")
+        MarketplaceCategory.objects.get_or_create(name="Feed & Forage", slug="feed-forage")
+
+    def test_categories_return_plain_array(self):
+        response = self.client.get('/api/v1/marketplace/categories/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+        self.assertGreaterEqual(len(response.data), 2)
+        self.assertIn('slug', response.data[0])
+        self.assertIn('livestock', [c['slug'] for c in response.data])
+
+    def test_categories_readable_without_authentication(self):
+        response = self.client.get('/api/v1/marketplace/categories/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 class MarketplaceListingTests(APITestCase):
@@ -91,6 +112,42 @@ class MarketplaceListingTests(APITestCase):
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_create_listing_via_multipart_with_image(self):
+        category = MarketplaceCategory.objects.get_or_create(name="Livestock", slug="livestock")[0]
+        img_buffer = io.BytesIO()
+        Image.new("RGB", (120, 80), color=(120, 40, 40)).save(img_buffer, format="PNG")
+        png = SimpleUploadedFile(
+            "photo.png",
+            img_buffer.getvalue(),
+            content_type="image/png",
+        )
+        self.client.force_authenticate(user=self.seller)
+        response = self.client.post(
+            '/api/v1/marketplace/listings/',
+            {
+                'title': 'Day-old broiler chicks',
+                'description': '100 chicks for sale',
+                'price': '4500.00',
+                'condition': 'new',
+                'quantity': '100',
+                'unit': 'chicks',
+                'negotiable': 'true',
+                'location': 'Dawakin Kudu, Kano State',
+                'category': str(category.id),
+                'images': [png],
+            },
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        listing = MarketplaceListing.objects.get(id=response.data['id'])
+        self.assertEqual(str(listing.seller_id), str(self.seller.id))
+        self.assertEqual(str(listing.category_id), str(category.id))
+        self.assertEqual(listing.negotiable, True)
+        self.assertEqual(listing.quantity, 100)
+        self.assertTrue(MarketplaceImage.objects.filter(listing=listing).exists())
+        self.assertEqual(response.data['seller'], str(self.seller))
+        self.assertEqual(response.data['seller_id'], str(self.seller.id))
 
 
 class MarketplaceBookmarkTests(APITestCase):
