@@ -53,9 +53,9 @@ class MarketplaceListingSerializer(serializers.ModelSerializer):
     images = MarketplaceImageSerializer(many=True, read_only=True)
     videos = MarketplaceVideoSerializer(many=True, read_only=True)
     documents = MarketplaceDocumentSerializer(many=True, read_only=True)
-    comments_count = serializers.IntegerField(source='comments.count', read_only=True)
-    reactions_count = serializers.IntegerField(source='reactions.count', read_only=True)
-    bookmarks_count = serializers.IntegerField(source='bookmarks.count', read_only=True)
+    comments_count = serializers.IntegerField(read_only=True)
+    reactions_count = serializers.IntegerField(read_only=True)
+    bookmarks_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = MarketplaceListing

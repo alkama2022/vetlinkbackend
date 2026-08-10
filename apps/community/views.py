@@ -23,6 +23,30 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 
+class IsAuthorOrAdmin(permissions.BasePermission):
+    """Write access only for the content author (or admins)."""
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_superuser or request.user.user_type in ('SYSTEM_ADMIN', 'CLINIC_ADMIN'):
+            return True
+        return getattr(obj, 'author_id', None) == request.user.id
+
+
+class IsOwnRecordOrAdmin(permissions.BasePermission):
+    """Write access only for the user who owns the record (or admins)."""
+
+    owner_field = 'user'
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_superuser or request.user.user_type in ('SYSTEM_ADMIN', 'CLINIC_ADMIN'):
+            return True
+        return getattr(obj, f'{self.owner_field}_id', None) == request.user.id
+
+
 class CommunityPostViewSet(viewsets.ModelViewSet):
     queryset = CommunityPost.objects.select_related('author', 'category').prefetch_related('tags').order_by('-created_at')
     serializer_class = CommunityPostSerializer
@@ -38,7 +62,7 @@ class CommunityPostViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ['update', 'partial_update', 'destroy']:
-            return [permissions.IsAuthenticated()]
+            return [permissions.IsAuthenticated(), IsAuthorOrAdmin()]
         return super().get_permissions()
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
@@ -53,11 +77,27 @@ class CommunityCommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommunityCommentSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+    def get_permissions(self):
+        if self.action in ['update', 'partial_update', 'destroy']:
+            return [permissions.IsAuthenticated(), IsAuthorOrAdmin()]
+        return super().get_permissions()
+
 
 class CommunityReactionViewSet(viewsets.ModelViewSet):
     queryset = CommunityReaction.objects.select_related('user', 'post')
     serializer_class = CommunityReactionSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(user=self.request.user)
+
+    def get_permissions(self):
+        if self.action in ['destroy', 'update', 'partial_update']:
+            return [permissions.IsAuthenticated(), IsOwnRecordOrAdmin()]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class CommunityBookmarkViewSet(viewsets.ModelViewSet):
@@ -91,6 +131,21 @@ class CommunityReportViewSet(viewsets.ModelViewSet):
     queryset = CommunityReport.objects.select_related('reporter', 'post').order_by('-created_at')
     serializer_class = CommunityReportSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_superuser or user.user_type in ('SYSTEM_ADMIN', 'CLINIC_ADMIN'):
+            return qs
+        return qs.filter(reporter=user)
+
+    def get_permissions(self):
+        if self.action in ['destroy', 'update', 'partial_update']:
+            return [permissions.IsAuthenticated(), IsOwnRecordOrAdmin(owner_field='reporter')]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        serializer.save(reporter=self.request.user)
 
 
 class CommunityCategoryViewSet(viewsets.ReadOnlyModelViewSet):

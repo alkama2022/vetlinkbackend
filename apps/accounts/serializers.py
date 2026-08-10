@@ -104,11 +104,9 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
-
-    def validate_email(self, value):
-        if not User.objects.filter(email=value).exists():
-            raise serializers.ValidationError('No user is registered with that email address.')
-        return value
+    # NOTE: existence is intentionally NOT validated here. Returning a
+    # "user not found" message would let attackers enumerate registered
+    # emails. The view always responds with the same success message.
 
 
 class ResetPasswordSerializer(serializers.Serializer):

@@ -32,7 +32,7 @@ from .serializers import (
     MarketplaceMessageSerializer,
 )
 from . import utils
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from django.core.files.base import ContentFile
 from apps.core.permissions import RolePermissionFactory
 
@@ -60,8 +60,10 @@ class IsOwnerOrReadOnly(BasePermission):
 
 class MarketplaceListingViewSet(viewsets.ModelViewSet):
     queryset = MarketplaceListing.objects.filter(is_deleted=False).annotate(
-        comments_count=Count('comments'), reactions_count=Count('reactions')
-    )
+        comments_count=Count('comments', filter=models.Q(comments__is_deleted=False)),
+        reactions_count=Count('reactions'),
+        bookmarks_count=Count('bookmarks'),
+    ).order_by('-created_at')
     serializer_class = MarketplaceListingSerializer
     permission_classes = (IsOwnerOrReadOnly,)
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -144,7 +146,6 @@ class MarketplaceListingViewSet(viewsets.ModelViewSet):
     def hide(self, request, pk=None):
         listing = self.get_object()
         listing.is_deleted = True
-        listing.status = 'sold'
         listing.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -157,14 +158,55 @@ class MarketplaceCommentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
+    def perform_update(self, serializer):
+        comment = self.get_object()
+        if comment.author_id != self.request.user.id:
+            raise PermissionDenied('You can only edit your own comments.')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.author_id != self.request.user.id:
+            raise PermissionDenied('You can only delete your own comments.')
+        instance.delete()
+
 
 class MarketplaceReactionViewSet(viewsets.ModelViewSet):
     queryset = MarketplaceReaction.objects.all()
     serializer_class = MarketplaceReactionSerializer
     permission_classes = (IsAuthenticated,)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        listing_id = request.data.get('listing')
+        reaction = request.data.get('reaction')
+        if not listing_id or not reaction:
+            return Response(
+                {'detail': 'listing and reaction are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        valid_types = [value for value, _ in MarketplaceReaction.REACTION_CHOICES]
+        if reaction not in valid_types:
+            return Response(
+                {'detail': f'reaction must be one of: {", ".join(valid_types)}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            listing = MarketplaceListing.objects.get(pk=listing_id)
+        except (MarketplaceListing.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {'detail': 'Listing not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        obj, created = MarketplaceReaction.objects.get_or_create(
+            listing=listing, user=request.user, reaction=reaction
+        )
+        if not created:
+            obj.delete()
+            return Response({'reacted': False}, status=status.HTTP_200_OK)
+        serializer = MarketplaceReactionSerializer(obj, context=self.get_serializer_context())
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class MarketplaceBookmarkViewSet(viewsets.ModelViewSet):
@@ -230,5 +272,28 @@ class MarketplaceMessageViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceMessageSerializer
     permission_classes = (IsAuthenticated,)
 
+    def get_queryset(self):
+        user = self.request.user
+        return self.queryset.filter(
+            models.Q(conversation__buyer=user) | models.Q(conversation__seller=user)
+        )
+
     def perform_create(self, serializer):
-        serializer.save(sender=self.request.user)
+        user = self.request.user
+        conversation = serializer.validated_data.get('conversation')
+        if conversation is None:
+            raise ValidationError({'conversation': 'conversation is required.'})
+        if conversation.buyer_id != user.id and conversation.seller_id != user.id:
+            raise PermissionDenied('You are not a participant of this conversation.')
+        serializer.save(sender=user)
+
+    def perform_update(self, serializer):
+        message = self.get_object()
+        if message.sender_id != self.request.user.id:
+            raise PermissionDenied('You can only edit your own messages.')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.sender_id != self.request.user.id:
+            raise PermissionDenied('You can only delete your own messages.')
+        instance.delete()

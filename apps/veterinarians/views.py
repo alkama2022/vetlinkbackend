@@ -8,14 +8,35 @@ from .models import VeterinarianProfile
 from .serializers import VeterinarianSerializer, VetMatchRequestSerializer
 
 
+class IsProfileOwnerOrAdmin(permissions.BasePermission):
+    """Write access only for the profile's own user (or admins)."""
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_superuser:
+            return True
+        return obj.user_id == request.user.id
+
+
 class VeterinarianViewSet(viewsets.ModelViewSet):
     queryset = VeterinarianProfile.objects.all().order_by('-rating')
     serializer_class = VeterinarianSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsProfileOwnerOrAdmin]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['available', 'lga', 'available_online', 'available_emergency']
     search_fields = ['full_name', 'clinic_name', 'specializations', 'lga', 'qualifications']
     ordering_fields = ['rating', 'years_experience', 'total_consultations', 'created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Regular users only see their own profile when hitting the generic
+        # endpoints; browsing is done through the dedicated match endpoint.
+        if self.action in ('update', 'partial_update', 'destroy'):
+            if self.request.user.is_superuser:
+                return qs
+            return qs.filter(user=self.request.user)
+        return qs
 
     @action(detail=False, methods=['post'], url_path='match')
     def match(self, request):

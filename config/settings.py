@@ -193,6 +193,21 @@ DATABASES = {
     )
 }
 
+if TESTING:
+    # NEVER run the test suite against the real (production) database.
+    # Tests create/destroy their own schema; pointing them at Postgres in
+    # production would risk data loss and add network latency.
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "test_mig.sqlite3",
+        }
+    }
+    # PBKDF2 with 720k iterations is needlessly slow for tests (a 10-minute
+    # suite, mostly spent hashing passwords). MD5 is insecure for production
+    # but fine for throwaway test users.
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},

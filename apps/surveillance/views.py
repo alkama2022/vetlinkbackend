@@ -21,22 +21,53 @@ from apps.core.permissions import IsGovernmentOfficerOrAdmin
 ALLOWED_PHOTO_TYPES = ('image/', 'video/')
 MAX_UPLOAD_SIZE = getattr(settings, 'MAX_UPLOAD_SIZE', 8 * 1024 * 1024)
 
+# Derive the stored extension from the validated content type rather than the
+# client-supplied filename, preventing misleading/harmful file extensions.
+_CONTENT_TYPE_EXTENSIONS = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'video/mp4': '.mp4',
+    'video/webm': '.webm',
+    'video/quicktime': '.mov',
+}
+
 
 def _save_report_photo(uploaded):
-    content_type = getattr(uploaded, 'content_type', '')
+    content_type = (getattr(uploaded, 'content_type', '') or '').lower()
     if not any(content_type.startswith(t) for t in ALLOWED_PHOTO_TYPES):
         raise ValidationError({'photos': f'File "{uploaded.name}" is not an allowed type.'})
     if uploaded.size > MAX_UPLOAD_SIZE:
         raise ValidationError({'photos': f'File "{uploaded.name}" exceeds the size limit.'})
+    ext = _CONTENT_TYPE_EXTENSIONS.get(content_type, '.bin')
     subdir = f"uploads/disease_reports/{date.today().strftime('%Y/%m/%d')}"
     directory = os.path.join(settings.MEDIA_ROOT, subdir)
     os.makedirs(directory, exist_ok=True)
-    ext = os.path.splitext(uploaded.name)[1][:10].lower()
     filename = f"{uuid.uuid4().hex}{ext}"
     with open(os.path.join(directory, filename), 'wb') as dest:
         for chunk in uploaded.chunks():
             dest.write(chunk)
     return f"{subdir}/{filename}"
+
+
+def _generate_report_code():
+    """Generate a unique VK-prefixed report code with collision retry."""
+    for _ in range(10):
+        candidate = f"VK{random.randint(100000, 999999)}"
+        if not DiseaseReport.objects.filter(report_code=candidate).exists():
+            return candidate
+    raise ValidationError({'report_code': 'Could not allocate a unique report code, please retry.'})
+
+
+class _IsReportModifierOrAdmin(permissions.BasePermission):
+    """Allow update/delete only for the report owner, government officers, or admins."""
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if user.is_superuser or user.user_type == 'GOVERNMENT_OFFICER':
+            return True
+        return obj.farmer_id == user.id
 
 
 class DiseaseReportViewSet(viewsets.ModelViewSet):
@@ -49,8 +80,21 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
     search_fields = ['report_code', 'disease', 'species', 'location', 'lga', 'farmer_name']
     ordering_fields = ['submitted_at', 'affected', 'dead']
 
+    def get_permissions(self):
+        # Anyone can create/list reports; only the owner (or a
+        # government officer / admin) may modify or delete them.
+        if self.action in ('update', 'partial_update', 'destroy'):
+            return [permissions.IsAuthenticated(), _IsReportModifierOrAdmin()]
+        return [permissions.IsAuthenticated()]
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        instance.delete()
+
     def perform_create(self, serializer):
-        report_code = f"VK{random.randint(100000, 999999)}"
+        report_code = _generate_report_code()
         lga = serializer.validated_data.get('lga')
         if not lga and serializer.validated_data.get('location'):
             loc = serializer.validated_data.get('location')
@@ -71,7 +115,8 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['patch'], url_path='status', permission_classes=[IsGovernmentOfficerOrAdmin])
     def update_status(self, request, report_code=None):
         report = self.get_object()
-        serializer = ReportStatusUpdateSerializer(data=request.data)
+        serializer = ReportStatusUpdateSerializer(
+            data=request.data, context={'current_status': report.alert_status})
         serializer.is_valid(raise_exception=True)
 
         report.alert_status = serializer.validated_data['alertStatus']
@@ -86,7 +131,7 @@ def surveillance_kpis(request):
     total_reports = DiseaseReport.objects.count()
     suspected_outbreaks = DiseaseReport.objects.filter(alert_status=DiseaseReport.AlertStatusChoices.SUSPECTED).count()
     confirmed_outbreaks = DiseaseReport.objects.filter(alert_status=DiseaseReport.AlertStatusChoices.CONFIRMED).count()
-    reporting_facilities = DiseaseReport.objects.values('location').distinct().count() or 65
+    reporting_facilities = DiseaseReport.objects.values('location').distinct().count()
 
     disease_counts = DiseaseReport.objects.values('disease').annotate(total=Count('id')).order_by('-total')
 

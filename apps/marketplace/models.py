@@ -88,6 +88,9 @@ class MarketplaceComment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
 
+    class Meta:
+        ordering = ['-created_at']
+
 
 class MarketplaceReaction(models.Model):
     REACTION_CHOICES = [('like', 'Like'), ('helpful', 'Helpful'), ('interesting', 'Interesting')]
@@ -109,6 +112,7 @@ class MarketplaceBookmark(models.Model):
 
     class Meta:
         unique_together = ('listing', 'user')
+        ordering = ['-created_at']
 
 
 class MarketplaceReport(models.Model):
@@ -130,6 +134,9 @@ class MarketplaceConversation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ['-updated_at']
+
 
 class MarketplaceMessage(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -139,3 +146,6 @@ class MarketplaceMessage(models.Model):
     attachment = models.FileField(upload_to=upload_to_listing, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     read = models.BooleanField(default=False, db_index=True)
+
+    class Meta:
+        ordering = ['created_at']

@@ -95,9 +95,12 @@ router.register(r'marketplace/conversations', MarketplaceConversationViewSet, ba
 router.register(r'marketplace/messages', MarketplaceMessageViewSet, basename='marketplace-message')
 router.register(r'payments/wallet', WalletViewSet, basename='wallet')
 router.register(r'payments/invoices', PaymentInvoiceViewSet, basename='payments-invoice')
-router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='withdrawal')
 router.register(r'payments/bank-accounts', BankAccountViewSet, basename='bank-account')
+# NOTE: the generic 'payments' router must be registered LAST among the
+# payments routes, otherwise its <pk> pattern shadows the more specific
+# wallet/invoices/withdrawals/bank-accounts prefixes.
+router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'chat/conversations', ConversationViewSet, basename='chat-conversation')
 router.register(r'chat/messages', MessageViewSet, basename='chat-message')
 router.register(r'monitoring/errors', ErrorLogViewSet, basename='monitoring-error')
@@ -140,6 +143,10 @@ urlpatterns = [
     path('api/v1/health/live/', health_live, name='health_live_api'),
     path('api/v1/health/ready/', health_ready, name='health_ready_api'),
 
+    # Gateway webhook must come BEFORE the router include so it is not
+    # shadowed by the generic payments <pk> pattern.
+    path('api/v1/payments/webhook/', gateway_webhook, name='gateway_webhook'),
+
     # REST Router API v1
     path('api/v1/', include(router.urls)),
 
@@ -147,13 +154,8 @@ urlpatterns = [
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
-    path('api/v1/payments/webhook/', gateway_webhook, name='gateway_webhook'),
 ]
 
 if settings.DEBUG:
     from django.conf.urls.static import static
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
-# TEMP REPRO - REMOVE AFTER DEBUGGING
-from apps.core.repro_views import slow_view  # noqa: E402
-urlpatterns += [path('repro/slow/', slow_view, name='repro_slow')]

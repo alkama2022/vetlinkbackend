@@ -7,7 +7,7 @@ Security model:
   * `POST /monitoring/test-failure/` — development environments only.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db.models import Count, Q
@@ -15,6 +15,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -81,7 +82,12 @@ class ErrorLogViewSet(viewsets.ModelViewSet):
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
         if date_from:
-            qs = qs.filter(timestamp__gte=date_from)
+            try:
+                parsed = timezone.make_aware(
+                    datetime.strptime(date_from, '%Y-%m-%d'))
+            except ValueError:
+                raise ValidationError({'date_from': 'Invalid date format, expected YYYY-MM-DD.'})
+            qs = qs.filter(timestamp__gte=parsed)
         if date_to:
             qs = qs.filter(timestamp__date__lte=date_to)
         return qs

@@ -114,9 +114,6 @@ class UserRegistrationView(generics.CreateAPIView):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    def perform_create(self, serializer):
-        user = serializer.save()
-
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
@@ -149,19 +146,22 @@ class ForgotPasswordView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = ForgotPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = User.objects.get(email=serializer.validated_data['email'])
-        token = user.issue_password_reset_token()
-        send_mail(
-            'VetLink password reset',
-            f'Use this token to reset your password: {token}',
-            'noreply@vetlink.local',
-            [user.email],
-            fail_silently=True,
-        )
-        record_event(
-            category='ACCOUNT', action='account.password_reset_requested',
-            target_type='user', target_id=str(user.id), request=request,
-        )
+        # Silent handling: whether or not the email exists, respond identically
+        # so unauthenticated callers cannot enumerate registered accounts.
+        user = User.objects.filter(email__iexact=serializer.validated_data['email']).first()
+        if user:
+            token = user.issue_password_reset_token()
+            send_mail(
+                'VetLink password reset',
+                f'Use this token to reset your password: {token}',
+                'noreply@vetlink.local',
+                [user.email],
+                fail_silently=True,
+            )
+            record_event(
+                category='ACCOUNT', action='account.password_reset_requested',
+                target_type='user', target_id=str(user.id), request=request,
+            )
         return Response({'detail': 'Password reset instructions were sent.'}, status=status.HTTP_200_OK)
 
 

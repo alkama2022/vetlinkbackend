@@ -10,7 +10,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .models import LabSample
 from .serializers import LabSampleSerializer, PublishResultSerializer
-from apps.core.permissions import IsLabStaffOrAdmin
+from apps.core.permissions import IsLabStaffOrAdmin, IsClinicStaffOrAdmin
 
 
 def _unique_code(prefix, model, field='code'):
@@ -23,12 +23,19 @@ def _unique_code(prefix, model, field='code'):
 class LabSampleViewSet(viewsets.ModelViewSet):
     queryset = LabSample.objects.all().order_by('-created_at')
     serializer_class = LabSampleSerializer
-    permission_classes = [permissions.IsAuthenticated, IsLabStaffOrAdmin]
+    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'sample_code'
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'priority', 'species', 'facility']
     search_fields = ['sample_code', 'species', 'test', 'facility', 'requested_by', 'result_findings']
     ordering_fields = ['date_received', 'priority', 'status', 'created_at']
+
+    def get_permissions(self):
+        # Clinics (vets, clinic admins, pharmacists) submit samples; lab staff
+        # own the analysis workflow (update status / publish results).
+        if self.action == 'create':
+            return [permissions.IsAuthenticated(), IsClinicStaffOrAdmin()]
+        return [permissions.IsAuthenticated(), IsLabStaffOrAdmin()]
 
     def perform_create(self, serializer):
         serializer.save(sample_code=_unique_code('LAB', LabSample, 'sample_code'))
