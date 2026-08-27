@@ -94,11 +94,15 @@ class CaseNoteTests(ClinicFlowBase):
 
 class LabSampleTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
+        self.clinic_user = User.objects.create_user(
+            email="clinic@test.com", password="testpass123",
+            user_type="VETERINARIAN", full_name="Dr Clinic",
+        )
+        self.lab_user = User.objects.create_user(
             email="lab@test.com", password="testpass123",
             user_type="LAB_STAFF", full_name="Lab Staff",
         )
-        self.client.force_authenticate(self.user)
+        self.client.force_authenticate(self.clinic_user)
 
     def test_create_sample_generates_code_and_publish_by_code(self):
         res = self.client.post(
@@ -112,6 +116,10 @@ class LabSampleTests(APITestCase):
         self.assertTrue(code.startswith("LAB"))
         self.assertTrue(LabSample.objects.filter(sample_code=code).exists())
 
+        res = self.client.patch(f"/api/v1/lab-samples/{code}/", {"status": "In analysis"}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.lab_user)
         res = self.client.patch(f"/api/v1/lab-samples/{code}/", {"status": "In analysis"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
 

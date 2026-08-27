@@ -25,5 +25,12 @@ class CaseNoteViewSet(viewsets.ModelViewSet):
     search_fields = ['note_code', 'owner_name', 'animal', 'vet_name', 'diagnosis', 'treatment']
     ordering_fields = ['date', 'created_at']
 
+    def get_queryset(self):
+        qs = CaseNote.objects.all().order_by('-created_at')
+        user = self.request.user
+        if user.is_superuser or user.user_type in ('SYSTEM_ADMIN', 'SUPER_ADMIN'):
+            return qs
+        return qs
+
     def perform_create(self, serializer):
         serializer.save(note_code=_unique_code('N', CaseNote, 'note_code'))

@@ -30,3 +30,9 @@ class LabSample(TimeStampedModel):
 
     def __str__(self):
         return f"{self.sample_code} - {self.test} ({self.species}) - {self.status}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', '-date_received'], name='idx_lab_status_date'),
+            models.Index(fields=['priority', 'status'], name='idx_lab_priority_status'),
+        ]

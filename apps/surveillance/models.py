@@ -33,5 +33,12 @@ class DiseaseReport(TimeStampedModel):
         db_index=True
     )
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['alert_status', '-submitted_at'], name='idx_disease_status_date'),
+            models.Index(fields=['species', 'alert_status'], name='idx_disease_species_status'),
+            models.Index(fields=['lga', '-submitted_at'], name='idx_disease_lga_date'),
+        ]
+
     def __str__(self):
         return f"{self.report_code} - {self.disease} in {self.lga} ({self.alert_status})"

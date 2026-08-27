@@ -10,6 +10,7 @@ from apps.accounts.views import (
     CustomTokenObtainPairView,
     ForgotPasswordView,
     LogoutView,
+    ResendVerificationEmailView,
     ResetPasswordView,
     UserProfileView,
     UserRegistrationView,
@@ -45,6 +46,7 @@ from apps.marketplace.views import (
     MarketplaceCategoryViewSet,
     MarketplaceConversationViewSet,
     MarketplaceMessageViewSet,
+    MarketplaceRatingViewSet,
 )
 from apps.payments.views import (
     WalletViewSet,
@@ -93,6 +95,7 @@ router.register(r'marketplace/reports', MarketplaceReportViewSet, basename='mark
 router.register(r'marketplace/categories', MarketplaceCategoryViewSet, basename='marketplace-category')
 router.register(r'marketplace/conversations', MarketplaceConversationViewSet, basename='marketplace-conversation')
 router.register(r'marketplace/messages', MarketplaceMessageViewSet, basename='marketplace-message')
+router.register(r'marketplace/ratings', MarketplaceRatingViewSet, basename='marketplace-rating')
 router.register(r'payments/wallet', WalletViewSet, basename='wallet')
 router.register(r'payments/invoices', PaymentInvoiceViewSet, basename='payments-invoice')
 router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='withdrawal')
@@ -121,6 +124,7 @@ urlpatterns = [
     path('api/v1/auth/password/forgot/', ForgotPasswordView.as_view(), name='forgot_password'),
     path('api/v1/auth/password/reset/', ResetPasswordView.as_view(), name='reset_password'),
     path('api/v1/auth/email/verify/', VerifyEmailView.as_view(), name='verify_email'),
+    path('api/v1/auth/email/resend/', ResendVerificationEmailView.as_view(), name='resend_verification_email'),
     path('api/v1/auth/logout/', LogoutView.as_view(), name='logout'),
 
     # Surveillance KPIs & Analytics Endpoint

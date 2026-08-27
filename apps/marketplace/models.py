@@ -149,3 +149,20 @@ class MarketplaceMessage(models.Model):
 
     class Meta:
         ordering = ['created_at']
+
+
+class MarketplaceRating(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    listing = models.ForeignKey(MarketplaceListing, related_name='ratings', on_delete=models.CASCADE)
+    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='marketplace_ratings', on_delete=models.CASCADE)
+    rating = models.PositiveSmallIntegerField()  # 1-5
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('listing', 'reviewer')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.reviewer} rated {self.listing} {self.rating}/5"

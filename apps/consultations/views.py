@@ -34,13 +34,12 @@ class ConsultationRequestViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_superuser or user.user_type in ('GOVERNMENT_OFFICER', 'SYSTEM_ADMIN', 'CLINIC_ADMIN'):
             qs = ConsultationRequest.objects.all()
+        elif user.user_type == 'FARMER':
+            qs = ConsultationRequest.objects.filter(farmer=user)
         else:
-            # Farmers see their own requests; vets see the ones assigned to
-            # their profile. (Both are participants in the same conversation.)
+            # Vets see the ones assigned to their profile.
             vet_profile = getattr(user, 'vet_profile', None)
-            qs = ConsultationRequest.objects.filter(
-                models.Q(farmer=user) | models.Q(vet=vet_profile)
-            )
+            qs = ConsultationRequest.objects.filter(vet=vet_profile)
         return qs.prefetch_related('messages').order_by('-submitted_at')
 
     def perform_create(self, serializer):
@@ -73,6 +72,18 @@ class ConsultationRequestViewSet(viewsets.ModelViewSet):
         consultation.accepted_at = timezone.now()
         consultation.save(update_fields=[
             'vet', 'vet_name', 'vet_id_str', 'status', 'accepted_at'])
+        # SMS notification to farmer that their consultation was accepted
+        try:
+            from apps.notifications.sms import send_sms
+            farmer = consultation.farmer
+            if farmer and getattr(farmer, 'phone_number', ''):
+                send_sms(
+                    farmer.phone_number,
+                    f'VetLink: Your consultation {consultation.consultation_code} has been accepted by '
+                    f'Dr {consultation.vet_name}. You can now start chatting.'
+                )
+        except Exception:
+            pass
         return Response(ConsultationRequestSerializer(consultation).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='messages')

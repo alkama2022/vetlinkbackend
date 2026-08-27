@@ -26,5 +26,15 @@ class PatientViewSet(viewsets.ModelViewSet):
     search_fields = ['patient_code', 'owner_name', 'owner_phone', 'animal_name', 'lga', 'species']
     ordering_fields = ['created_at', 'owner_name', 'animal_name']
 
+    def get_queryset(self):
+        qs = Patient.objects.all().order_by('-created_at')
+        user = self.request.user
+        if user.is_superuser or user.user_type in ('SYSTEM_ADMIN', 'SUPER_ADMIN'):
+            return qs
+        return qs
+
     def perform_create(self, serializer):
-        serializer.save(patient_code=_unique_code('P', Patient, 'patient_code'))
+        serializer.save(
+            patient_code=_unique_code('P', Patient, 'patient_code'),
+            created_by=self.request.user,
+        )

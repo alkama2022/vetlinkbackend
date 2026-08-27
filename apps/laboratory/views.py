@@ -30,6 +30,13 @@ class LabSampleViewSet(viewsets.ModelViewSet):
     search_fields = ['sample_code', 'species', 'test', 'facility', 'requested_by', 'result_findings']
     ordering_fields = ['date_received', 'priority', 'status', 'created_at']
 
+    def get_queryset(self):
+        qs = LabSample.objects.all().order_by('-created_at')
+        user = self.request.user
+        if user.is_superuser or user.user_type in ('SYSTEM_ADMIN', 'SUPER_ADMIN'):
+            return qs
+        return qs
+
     def get_permissions(self):
         # Clinics (vets, clinic admins, pharmacists) submit samples; lab staff
         # own the analysis workflow (update status / publish results).

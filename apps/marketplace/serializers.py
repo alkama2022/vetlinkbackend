@@ -11,6 +11,7 @@ from .models import (
     MarketplaceCategory,
     MarketplaceConversation,
     MarketplaceMessage,
+    MarketplaceRating,
 )
 
 
@@ -56,20 +57,40 @@ class MarketplaceListingSerializer(serializers.ModelSerializer):
     comments_count = serializers.IntegerField(read_only=True)
     reactions_count = serializers.IntegerField(read_only=True)
     bookmarks_count = serializers.IntegerField(read_only=True)
+    average_rating = serializers.SerializerMethodField()
+    ratings_count = serializers.SerializerMethodField()
 
     class Meta:
         model = MarketplaceListing
         fields = (
             'id', 'seller', 'seller_id', 'title', 'category', 'description', 'price', 'negotiable', 'quantity', 'unit', 'condition', 'status',
             'location', 'contact_preference', 'delivery_options', 'tags', 'images', 'videos', 'documents', 'created_at', 'updated_at',
-            'comments_count', 'reactions_count', 'bookmarks_count'
+            'comments_count', 'reactions_count', 'bookmarks_count', 'average_rating', 'ratings_count'
         )
         read_only_fields = ('seller', 'created_at', 'updated_at')
+
+    def get_average_rating(self, obj):
+        ratings = obj.ratings.all()
+        if not ratings:
+            return None
+        return round(sum(r.rating for r in ratings) / len(ratings), 1)
+
+    def get_ratings_count(self, obj):
+        return obj.ratings.count()
 
     def create(self, validated_data):
         request = self.context.get('request')
         listing = MarketplaceListing.objects.create(seller=request.user, **validated_data)
         return listing
+
+
+class MarketplaceRatingSerializer(serializers.ModelSerializer):
+    reviewer = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = MarketplaceRating
+        fields = ('id', 'listing', 'reviewer', 'rating', 'comment', 'created_at', 'updated_at')
+        read_only_fields = ('reviewer', 'created_at', 'updated_at')
 
 
 class MarketplaceReactionSerializer(serializers.ModelSerializer):

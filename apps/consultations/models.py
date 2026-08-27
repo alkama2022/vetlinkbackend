@@ -56,6 +56,14 @@ class ConsultationRequest(TimeStampedModel):
     def __str__(self):
         return f"{self.consultation_code} - {self.farmer_name} ({self.species}) -> {self.vet_name}"
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', '-submitted_at'], name='idx_consult_status_date'),
+            models.Index(fields=['farmer', 'status'], name='idx_consult_farmer_status'),
+            models.Index(fields=['vet', 'status'], name='idx_consult_vet_status'),
+            models.Index(fields=['severity', 'status'], name='idx_consult_severity_status'),
+        ]
+
 
 class ChatMessage(TimeStampedModel):
     class SenderChoices(models.TextChoices):
@@ -74,3 +82,9 @@ class ChatMessage(TimeStampedModel):
 
     def __str__(self):
         return f"Msg from {self.sender_name} on {self.consultation.consultation_code}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['consultation', '-sent_at'], name='idx_msg_consult_date'),
+            models.Index(fields=['read', '-sent_at'], name='idx_msg_read_date'),
+        ]

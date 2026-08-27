@@ -28,3 +28,9 @@ class Appointment(TimeStampedModel):
 
     def __str__(self):
         return f"{self.appointment_code} ({self.time} - {self.date}) - {self.owner_name} - {self.status}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', 'date'], name='idx_appt_status_date'),
+            models.Index(fields=['patient', 'date'], name='idx_appt_patient_date'),
+        ]

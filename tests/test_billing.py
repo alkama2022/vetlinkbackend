@@ -1,3 +1,5 @@
+from unittest.mock import patch, MagicMock
+
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -5,6 +7,7 @@ from rest_framework.test import APITestCase
 from apps.billing.models import Invoice as BillingInvoice
 from apps.payments.models import Invoice as PaymentInvoice
 from apps.payments.models import Payment
+from apps.payments.gateways import StubGateway
 
 
 User = get_user_model()
@@ -81,7 +84,13 @@ class BillingInvoiceTests(APITestCase):
         response = self.client.post('/api/v1/invoices/INV-TEST-001/checkout/', {}, format='json')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_webhook_marks_billing_invoice_paid(self):
+    @patch('apps.payments.views.get_gateway_provider')
+    def test_webhook_marks_billing_invoice_paid(self, mock_get_gateway):
+        mock_gateway = MagicMock()
+        mock_gateway.verify_webhook.return_value = True
+        mock_gateway.verify_transaction.return_value = {'status': 'successful'}
+        mock_get_gateway.return_value = mock_gateway
+
         self.client.force_authenticate(user=self.staff)
         checkout = self.client.post('/api/v1/invoices/INV-TEST-001/checkout/', {}, format='json')
         reference = checkout.data['reference']

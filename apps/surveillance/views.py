@@ -81,6 +81,9 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
     ordering_fields = ['submitted_at', 'affected', 'dead']
 
     def get_permissions(self):
+        # Only government officers/admins can update status
+        if self.action == 'update_status':
+            return [IsGovernmentOfficerOrAdmin()]
         # Anyone can create/list reports; only the owner (or a
         # government officer / admin) may modify or delete them.
         if self.action in ('update', 'partial_update', 'destroy'):
@@ -106,11 +109,18 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
             extra['photos'] = (serializer.validated_data.get('photos') or []) + saved
         user = getattr(self.request, 'user', None)
         if user and getattr(user, 'is_authenticated', False):
-            # Associate the submitting user when possible
             extra['farmer'] = user
             if not serializer.validated_data.get('farmer_name'):
                 extra['farmer_name'] = getattr(user, 'full_name', '')
-        serializer.save(**extra)
+        report = serializer.save(**extra)
+        # Send SMS confirmation to farmer
+        try:
+            from apps.notifications.sms import notify_disease_report_created
+            farmer_phone = getattr(user, 'phone_number', '') if user else ''
+            if farmer_phone:
+                notify_disease_report_created(report, farmer_phone)
+        except Exception:
+            pass  # Never let SMS failure block report creation
 
     @action(detail=True, methods=['patch'], url_path='status', permission_classes=[IsGovernmentOfficerOrAdmin])
     def update_status(self, request, report_code=None):

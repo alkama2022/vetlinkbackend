@@ -19,6 +19,7 @@ from .models import (
     MarketplaceCategory,
     MarketplaceConversation,
     MarketplaceMessage,
+    MarketplaceRating,
 )
 from .serializers import (
     MarketplaceListingSerializer,
@@ -30,6 +31,7 @@ from .serializers import (
     MarketplaceCategorySerializer,
     MarketplaceConversationSerializer,
     MarketplaceMessageSerializer,
+    MarketplaceRatingSerializer,
 )
 from . import utils
 from rest_framework.exceptions import ValidationError, PermissionDenied
@@ -297,3 +299,20 @@ class MarketplaceMessageViewSet(viewsets.ModelViewSet):
         if instance.sender_id != self.request.user.id:
             raise PermissionDenied('You can only delete your own messages.')
         instance.delete()
+
+
+class MarketplaceRatingViewSet(viewsets.ModelViewSet):
+    serializer_class = MarketplaceRatingSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        listing_id = self.kwargs.get('listing_pk')
+        return MarketplaceRating.objects.filter(listing_id=listing_id)
+
+    def perform_create(self, serializer):
+        listing_id = self.kwargs.get('listing_pk')
+        listing = get_object_or_404(MarketplaceListing, pk=listing_id)
+        # One rating per user per listing
+        if MarketplaceRating.objects.filter(listing=listing, reviewer=self.request.user).exists():
+            raise ValidationError({'detail': 'You have already rated this listing.'})
+        serializer.save(reviewer=self.request.user, listing=listing)

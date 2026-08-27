@@ -26,5 +26,12 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     search_fields = ['appointment_code', 'owner_name', 'animal', 'reason', 'notes']
     ordering_fields = ['date', 'time', 'created_at']
 
+    def get_queryset(self):
+        qs = Appointment.objects.all().order_by('-created_at')
+        user = self.request.user
+        if user.is_superuser or user.user_type in ('SYSTEM_ADMIN', 'SUPER_ADMIN'):
+            return qs
+        return qs
+
     def perform_create(self, serializer):
         serializer.save(appointment_code=_unique_code('A', Appointment, 'appointment_code'))

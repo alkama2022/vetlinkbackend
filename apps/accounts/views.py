@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
+from django.template.loader import render_to_string
 from django.utils import timezone
+from django.conf import settings
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +19,7 @@ from .serializers import (
     CustomTokenObtainPairSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
+    ResendVerificationEmailSerializer,
     UserProfileSerializer,
     UserRegistrationSerializer,
     VerifyEmailSerializer,
@@ -105,6 +108,25 @@ class UserRegistrationView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+
+        # Generate email verification token and send email
+        token = user.issue_email_verification_token()
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+        send_mail(
+            subject='Verify your VetLink email address',
+            message=(
+                f'Hello {user.full_name},\n\n'
+                f'Thank you for registering with VetLink Kano.\n\n'
+                f'Please verify your email by clicking the link below:\n{verify_url}\n\n'
+                f'Or use this verification code: {token}\n\n'
+                f'If you did not create this account, please ignore this email.\n\n'
+                f'— VetLink Team'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+
         record_event(
             category='ACCOUNT', action='account.registered',
             actor=user, target_type='user', target_id=str(user.id),
@@ -192,6 +214,35 @@ class VerifyEmailView(APIView):
         user.email_verification_token = ''
         user.save(update_fields=['is_email_verified', 'email_verification_token'])
         return Response({'detail': 'Email verified successfully.'}, status=status.HTTP_200_OK)
+
+
+@extend_schema(request=ResendVerificationEmailSerializer, responses={200: OpenApiTypes.OBJECT})
+class ResendVerificationEmailView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = ResendVerificationEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        user = User.objects.filter(email__iexact=email).first()
+        # Always return success to prevent email enumeration
+        if user and not user.is_email_verified:
+            token = user.issue_email_verification_token()
+            verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+            send_mail(
+                subject='Verify your VetLink email address',
+                message=(
+                    f'Hello {user.full_name},\n\n'
+                    f'Please verify your email by clicking the link below:\n{verify_url}\n\n'
+                    f'Or use this verification code: {token}\n\n'
+                    f'— VetLink Team'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=True,
+            )
+        return Response({'detail': 'If your email is registered and unverified, a verification link has been sent.'},
+                        status=status.HTTP_200_OK)
 
 
 @extend_schema(request=OpenApiTypes.OBJECT, responses={200: OpenApiTypes.OBJECT})

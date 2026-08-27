@@ -38,6 +38,7 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     ".onrender.com",
+    "testserver",
 ]
 
 
@@ -251,6 +252,17 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # ============================================================
+# EMAIL
+# ============================================================
+
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend',
+)
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'VetLink <noreply@vetlink.local>')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+
+# ============================================================
 # DEFAULT PRIMARY KEY
 # ============================================================
 
@@ -379,3 +391,43 @@ FLUTTERWAVE_SECRET_KEY = os.getenv('FLUTTERWAVE_SECRET_KEY', '')
 FLUTTERWAVE_PUBLIC_KEY = os.getenv('FLUTTERWAVE_PUBLIC_KEY', '')
 FLUTTERWAVE_API_BASE = os.getenv('FLUTTERWAVE_API_BASE', 'https://api.flutterwave.com/v3')
 FLUTTERWAVE_WEBHOOK_SECRET = os.getenv('FLUTTERWAVE_WEBHOOK_SECRET', FLUTTERWAVE_SECRET_KEY)
+
+# Sentry error tracking (set SENTRY_DSN env var to enable)
+SENTRY_DSN = os.getenv('SENTRY_DSN', '')
+if SENTRY_DSN and not TESTING:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
+
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[DjangoIntegration()],
+            traces_sample_rate=0.1,
+            send_default_pii=True,
+            environment="production" if not DEBUG else "development",
+        )
+    except ImportError:
+        pass
+
+# Celery configuration
+CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Africa/Lagos'
+
+CELERY_BEAT_SCHEDULE = {
+    'check-drug-expiry': {
+        'task': 'config.tasks.check_drug_expiry',
+        'schedule': 86400,  # Daily
+    },
+    'send-appointment-reminders': {
+        'task': 'config.tasks.send_appointment_reminders',
+        'schedule': 3600,  # Every hour
+    },
+    'cleanup-old-notifications': {
+        'task': 'config.tasks.cleanup_old_notifications',
+        'schedule': 604800,  # Weekly
+    },
+}

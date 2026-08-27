@@ -19,6 +19,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'user_type': self.user.user_type,
             'lga': self.user.lga,
             'phone_number': self.user.phone_number,
+            'is_email_verified': self.user.is_email_verified,
         }
         return data
 
@@ -139,6 +140,10 @@ class VerifyEmailSerializer(serializers.Serializer):
             raise serializers.ValidationError({'token': 'Invalid email verification token.'})
         attrs['user'] = user
         return attrs
+
+
+class ResendVerificationEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
 
 
 class VetLoginSerializer(serializers.Serializer):
