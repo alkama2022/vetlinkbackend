@@ -11,6 +11,19 @@ class DrugStock(TimeStampedModel):
     reorder_level = models.PositiveIntegerField(default=10)
     expiry_date = models.CharField(max_length=20) # YYYY-MM-DD
     unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00) # ₦
+    facility_name = models.CharField(max_length=255, blank=True, default='') # e.g. Kano Vet Pharmacy
+    facility_location = models.CharField(max_length=255, blank=True, default='') # e.g. Tudun Wada, Kano
+    facility_lga = models.CharField(max_length=100, blank=True, default='', db_index=True) # e.g. Kano Municipal
+    contact_phone = models.CharField(max_length=20, blank=True, default='')
+    is_available = models.BooleanField(default=True) # Can be set false when out of stock
+    last_restocked = models.DateField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['name', 'facility_lga'], name='idx_drug_name_lga'),
+            models.Index(fields=['category', 'is_available'], name='idx_drug_cat_avail'),
+            models.Index(fields=['facility_lga', 'is_available'], name='idx_drug_lga_avail'),
+        ]
 
     def __str__(self):
         return f"{self.drug_code} - {self.name} ({self.quantity} {self.unit})"

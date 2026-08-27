@@ -4,6 +4,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from apps.integrations.whatsapp import verify_whatsapp_webhook, handle_whatsapp_message
 
 from apps.accounts.views import (
     ChangePasswordView,
@@ -21,13 +22,17 @@ from apps.veterinarians.views import VeterinarianViewSet
 from apps.patients.views import PatientViewSet
 from apps.appointments.views import AppointmentViewSet
 from apps.consultations.views import ConsultationRequestViewSet
-from apps.pharmacy.views import DrugStockViewSet
+from apps.pharmacy.views import DrugStockViewSet, MedicineFinderViewSet
 from apps.laboratory.views import LabSampleViewSet
 from apps.surveillance.views import DiseaseReportViewSet, surveillance_kpis
+from apps.surveillance.weather_risk import WeatherDiseaseRiskView
+from apps.surveillance.heatmap import OutbreakHeatmapView
 from apps.billing.views import InvoiceViewSet
 from apps.clinical_notes.views import CaseNoteViewSet
 from apps.notifications.views import NotificationViewSet
 from apps.farmers.views import FarmerHerdViewSet, FarmerReminderViewSet
+from apps.vaccinations.views import VaccineTemplateViewSet, VaccinationRecordViewSet
+from apps.vet_bookings.views import VetAvailabilityViewSet, VetBookingViewSet
 from apps.community.views import (
     CommunityPostViewSet,
     CommunityCommentViewSet,
@@ -73,6 +78,7 @@ router.register(r'patients', PatientViewSet, basename='patient')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
 router.register(r'consultations', ConsultationRequestViewSet, basename='consultation')
 router.register(r'drugs', DrugStockViewSet, basename='drug')
+router.register(r'medicine-finder', MedicineFinderViewSet, basename='medicine-finder')
 router.register(r'lab-samples', LabSampleViewSet, basename='lab-sample')
 router.register(r'disease-reports', DiseaseReportViewSet, basename='disease-report')
 router.register(r'invoices', InvoiceViewSet, basename='invoice')
@@ -80,6 +86,10 @@ router.register(r'case-notes', CaseNoteViewSet, basename='case-note')
 router.register(r'notifications', NotificationViewSet, basename='notification')
 router.register(r'farmers/herds', FarmerHerdViewSet, basename='farmer-herd')
 router.register(r'farmers/reminders', FarmerReminderViewSet, basename='farmer-reminder')
+router.register(r'vaccinations', VaccinationRecordViewSet, basename='vaccination')
+router.register(r'vaccine-templates', VaccineTemplateViewSet, basename='vaccine-template')
+router.register(r'vet-availability', VetAvailabilityViewSet, basename='vet-availability')
+router.register(r'vet-bookings', VetBookingViewSet, basename='vet-booking')
 router.register(r'community/posts', CommunityPostViewSet, basename='community-post')
 router.register(r'community/comments', CommunityCommentViewSet, basename='community-comment')
 router.register(r'community/reactions', CommunityReactionViewSet, basename='community-reaction')
@@ -130,6 +140,12 @@ urlpatterns = [
     # Surveillance KPIs & Analytics Endpoint
     path('api/v1/surveillance/kpis/', surveillance_kpis, name='surveillance_kpis'),
 
+    # Weather Disease Risk Alerts
+    path('api/v1/surveillance/weather-risks/', WeatherDiseaseRiskView.as_view(), name='weather_disease_risks'),
+
+    # Public Outbreak Heatmap
+    path('api/v1/surveillance/heatmap/', OutbreakHeatmapView.as_view(), name='outbreak_heatmap'),
+
     # Real-Time Chat
     path('api/v1/chat/contacts/', ChatContactsView.as_view(), name='chat_contacts'),
 
@@ -150,6 +166,10 @@ urlpatterns = [
     # Gateway webhook must come BEFORE the router include so it is not
     # shadowed by the generic payments <pk> pattern.
     path('api/v1/payments/webhook/', gateway_webhook, name='gateway_webhook'),
+
+    # WhatsApp Bot Webhooks
+    path('api/v1/whatsapp/webhook/', verify_whatsapp_webhook, name='whatsapp_verify'),
+    path('api/v1/whatsapp/message/', handle_whatsapp_message, name='whatsapp_message'),
 
     # REST Router API v1
     path('api/v1/', include(router.urls)),

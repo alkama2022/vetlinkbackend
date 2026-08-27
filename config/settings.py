@@ -120,6 +120,12 @@ INSTALLED_APPS = [
     'apps.clinical_notes',
     'apps.notifications',
     'apps.farmers',
+    'apps.vaccinations',
+    'apps.vet_bookings',
+    'apps.agents',
+    'apps.insurance',
+    'apps.health_tips',
+    'apps.integrations',
     'apps.chat',
     'apps.monitoring',
 ]
@@ -431,3 +437,8 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 604800,  # Weekly
     },
 }
+
+# ─── WhatsApp Bot ─────────────────────────────────────────────────────────────
+WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', 'console')  # console, twilio, africastalking
+WHATSAPP_VERIFY_TOKEN = os.getenv('WHATSAPP_VERIFY_TOKEN', 'vetlink_kano_verify')
+WHATSAPP_APP_SECRET = os.getenv('WHATSAPP_APP_SECRET', '')

@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from apps.core.models import TimeStampedModel
 
 
 class MarketplaceCategory(models.Model):
@@ -149,6 +150,41 @@ class MarketplaceMessage(models.Model):
 
     class Meta:
         ordering = ['created_at']
+
+
+class MarketplaceDelivery(TimeStampedModel):
+    """Delivery tracking for marketplace orders."""
+    class StatusChoices(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        PICKED_UP = 'picked_up', 'Picked Up'
+        IN_TRANSIT = 'in_transit', 'In Transit'
+        DELIVERED = 'delivered', 'Delivered'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    listing = models.ForeignKey(MarketplaceListing, related_name='deliveries', on_delete=models.CASCADE)
+    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='marketplace_deliveries', on_delete=models.CASCADE)
+    seller = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='marketplace_deliveries_sold', on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=StatusChoices.choices, default=StatusChoices.PENDING, db_index=True)
+    delivery_address = models.TextField()
+    delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    escrow_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    escrow_released = models.BooleanField(default=False)
+    tracking_updates = models.JSONField(default=list)  # [{timestamp, status, note}]
+    estimated_delivery = models.DateField(null=True, blank=True)
+    actual_delivery = models.DateField(null=True, blank=True)
+    quantity = models.FloatField(default=1)
+    total_price = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['buyer', 'status'], name='idx_delivery_buyer_status'),
+            models.Index(fields=['seller', 'status'], name='idx_delivery_seller_status'),
+        ]
+
+    def __str__(self):
+        return f"Delivery {str(self.id)[:8]} - {self.listing.title}"
 
 
 class MarketplaceRating(models.Model):
