@@ -301,6 +301,13 @@ class MarketplaceMessageViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
+class MarketplaceDeliveriesView(APIView):  # type: ignore  # defined below after imports
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response([])
+
+
 class MarketplaceRatingViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceRatingSerializer
     permission_classes = [IsAuthenticated]
