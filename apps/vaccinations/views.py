@@ -144,10 +144,46 @@ class VaccinationRecordViewSet(viewsets.ModelViewSet):
         except ValueError:
             return Response({'error': 'Invalid date format (YYYY-MM-DD)'}, status=400)
 
-        templates = VaccineTemplate.objects.filter(species__icontains=species, is_active=True)
+        # Normalize species: frontend sends "Poultry (Chicken)" but DB has variants like
+        # "Poultry", "Poultry (Chicken)", "Poultry (Turkey)", "Goat", etc.
+        # Match any template where either side contains the other (case-insensitive).
+        base = species.split("(")[0].strip()  # "Poultry (Chicken)" -> "Poultry"
+        normalized_candidates = {species, base}
+        # Also handle slash combined labels like "Goat / Sheep"
+        for candidate in list(normalized_candidates):
+            if "/" in candidate:
+                for part in candidate.split("/"):
+                    normalized_candidates.add(part.strip())
+        # Build Q: species icontains any candidate OR candidate icontains species
+        from django.db.models import Q as _Q
+
+        q = _Q()
+        for cand in normalized_candidates:
+            if not cand:
+                continue
+            q |= _Q(species__icontains=cand) | _Q(species__iexact=cand)
+            # reverse: request contains template species (e.g. request "Poultry (Chicken)" contains "Poultry")
+            # Do via Python fallback below if Q yields nothing, so keep Q simple
+        templates = VaccineTemplate.objects.filter(q, is_active=True)
+        # Fallback: Python-level broad match if still empty (e.g. "Cattle" vs "Cattle " with spacing)
+        if not templates.exists():
+            # try token overlap
+            request_tokens = set(base.lower().split())
+            all_active = VaccineTemplate.objects.filter(is_active=True)
+            matched = []
+            for t in all_active:
+                t_tokens = set(t.species.lower().split())
+                if request_tokens & t_tokens or base.lower() in t.species.lower() or t.species.lower() in base.lower():
+                    matched.append(t.id)
+            if matched:
+                templates = VaccineTemplate.objects.filter(id__in=matched)
+
         if not templates.exists():
             return Response(
-                {'error': f'No vaccination templates found for "{species}"'},
+                {
+                    'error': f'No vaccination templates found for "{species}"',
+                    'hint': 'If this is a new species, add a template at /api/v1/vaccine-templates/ or create a record manually via Add Record.',
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
