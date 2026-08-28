@@ -2,6 +2,7 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, BasePermission
+from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db import models
 from django.db.models import Count
@@ -301,13 +302,6 @@ class MarketplaceMessageViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-class MarketplaceDeliveriesView(APIView):  # type: ignore  # defined below after imports
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        return Response([])
-
-
 class MarketplaceRatingViewSet(viewsets.ModelViewSet):
     serializer_class = MarketplaceRatingSerializer
     permission_classes = [IsAuthenticated]
@@ -323,3 +317,12 @@ class MarketplaceRatingViewSet(viewsets.ModelViewSet):
         if MarketplaceRating.objects.filter(listing=listing, reviewer=self.request.user).exists():
             raise ValidationError({'detail': 'You have already rated this listing.'})
         serializer.save(reviewer=self.request.user, listing=listing)
+
+
+class MarketplaceDeliveriesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Placeholder: deliveries are tracked via MarketplaceConversation states;
+        # return empty until fulfillment workflow is modeled.
+        return Response([])

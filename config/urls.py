@@ -57,6 +57,7 @@ from apps.marketplace.views import (
     MarketplaceConversationViewSet,
     MarketplaceMessageViewSet,
     MarketplaceRatingViewSet,
+    MarketplaceDeliveriesView,
 )
 from apps.payments.views import (
     WalletViewSet,
@@ -169,6 +170,9 @@ urlpatterns = [
     path('api/v1/health/', health_summary, name='health_api'),
     path('api/v1/health/live/', health_live, name='health_live_api'),
     path('api/v1/health/ready/', health_ready, name='health_ready_api'),
+
+    # Marketplace deliveries placeholder (must be before router include)
+    path('api/v1/marketplace/deliveries/', MarketplaceDeliveriesView.as_view(), name='marketplace_deliveries'),
 
     # Gateway webhook must come BEFORE the router include so it is not
     # shadowed by the generic payments <pk> pattern.

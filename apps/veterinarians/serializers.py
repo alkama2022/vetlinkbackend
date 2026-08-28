@@ -3,10 +3,13 @@ from .models import VeterinarianProfile
 
 
 class VeterinarianSerializer(serializers.ModelSerializer):
+    user_id = serializers.CharField(source='user.id', read_only=True, default=None)
+    user = serializers.CharField(source='user.id', read_only=True, default=None)
+
     class Meta:
         model = VeterinarianProfile
         fields = [
-            'id', 'vet_code', 'full_name', 'license_number', 'qualifications',
+            'id', 'user_id', 'user', 'vet_code', 'full_name', 'license_number', 'qualifications',
             'specializations', 'species_treated', 'diseases_expertise',
             'years_experience', 'languages', 'clinic_name', 'clinic_address',
             'lga', 'service_area', 'whatsapp_number', 'phone', 'email',

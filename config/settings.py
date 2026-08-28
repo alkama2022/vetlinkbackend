@@ -45,14 +45,23 @@ ALLOWED_HOSTS = [
 #CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
 #CORS_ALLOW_CREDENTIALS = os.getenv('CORS_ALLOW_CREDENTIALS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
 
+_extra_frontend = os.getenv("FRONTEND_URL", "").strip()
+_extra_origins = [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     # Production Vercel frontends
     "https://alkama2022-vetlinkfrontendkano.vercel.app",
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
     "https://vetlinkfrontendkan-coikas6hd-mevs-me.vercel.app",
+] + ([_extra_frontend] if _extra_frontend else []) + _extra_origins
+
+# Allow any Vercel preview deployment for this project
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -60,12 +69,12 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-
-    # Production Vercel frontends
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "https://alkama2022-vetlinkfrontendkano.vercel.app",
     "https://vetlinkfrontendkan-git-main-mevs-me.vercel.app",
     "https://vetlinkfrontendkan-coikas6hd-mevs-me.vercel.app",
-]
+] + ([_extra_frontend] if _extra_frontend else []) + _extra_origins
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0' if DEBUG else '31536000'))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
 SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
