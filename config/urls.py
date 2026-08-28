@@ -113,6 +113,7 @@ router.register(r'marketplace/categories', MarketplaceCategoryViewSet, basename=
 router.register(r'marketplace/conversations', MarketplaceConversationViewSet, basename='marketplace-conversation')
 router.register(r'marketplace/messages', MarketplaceMessageViewSet, basename='marketplace-message')
 router.register(r'marketplace/ratings', MarketplaceRatingViewSet, basename='marketplace-rating')
+router.register(r'marketplace/delivery-orders', MarketplaceDeliveryViewSet, basename='marketplace-delivery')
 router.register(r'payments/wallet', WalletViewSet, basename='wallet')
 router.register(r'payments/invoices', PaymentInvoiceViewSet, basename='payments-invoice')
 router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='withdrawal')

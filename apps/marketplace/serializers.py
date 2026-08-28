@@ -140,12 +140,14 @@ class MarketplaceMessageSerializer(serializers.ModelSerializer):
 class MarketplaceDeliverySerializer(serializers.ModelSerializer):
     buyer = serializers.StringRelatedField(read_only=True)
     seller = serializers.StringRelatedField(read_only=True)
+    buyer_id = serializers.UUIDField(read_only=True)
+    seller_id = serializers.UUIDField(read_only=True)
     listing_title = serializers.CharField(source='listing.title', read_only=True)
 
     class Meta:
         model = MarketplaceDelivery
         fields = (
-            'id', 'listing', 'listing_title', 'buyer', 'seller', 'status',
+            'id', 'listing', 'listing_title', 'buyer', 'buyer_id', 'seller', 'seller_id', 'status',
             'delivery_address', 'delivery_fee', 'escrow_amount', 'escrow_released',
             'tracking_updates', 'estimated_delivery', 'actual_delivery',
             'quantity', 'total_price', 'created_at', 'updated_at',

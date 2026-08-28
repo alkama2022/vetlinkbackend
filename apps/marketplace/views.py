@@ -34,6 +34,7 @@ from .serializers import (
     MarketplaceConversationSerializer,
     MarketplaceMessageSerializer,
     MarketplaceRatingSerializer,
+    MarketplaceDeliverySerializer,
 )
 from . import utils
 from rest_framework.exceptions import ValidationError, PermissionDenied

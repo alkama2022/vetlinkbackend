@@ -189,11 +189,34 @@ def compliance_report(request):
     disease_breakdown = list(
         reports_qs.values('disease').annotate(count=Count('id')).order_by('-count')[:10]
     )
-    lga_breakdown = list(
+    # Real LGA breakdown — farmers per LGA from User.lga
+    lga_reports = list(
         reports_qs.values('lga').annotate(reports=Count('id')).order_by('-reports')[:10]
     )
-    for item in lga_breakdown:
-        item['farmers'] = 0  # placeholder — fill when farmer-LGA model exists
+    # Build farmer counts per LGA
+    try:
+        from apps.accounts.models import User as _User
+        farmer_lga_counts = dict(
+            _User.objects.filter(user_type='FARMER')
+            .exclude(lga__isnull=True).exclude(lga='')
+            .values('lga').annotate(c=Count('id')).values_list('lga', 'c')
+        )
+    except Exception:
+        farmer_lga_counts = {}
+    lga_breakdown = []
+    for item in lga_reports:
+        lga_name = item['lga'] or 'Unknown'
+        lga_breakdown.append({
+            'lga': lga_name,
+            'farmers': farmer_lga_counts.get(lga_name, 0),
+            'reports': item['reports'],
+        })
+    # Drug transactions — count of pharmacy stock records as proxy (or 0 if unavailable)
+    try:
+        from apps.pharmacy.models import DrugStock
+        drug_transactions = DrugStock.objects.count()
+    except Exception:
+        drug_transactions = 0
 
     return Response({
         'title': f'Compliance Report — {lga or "All LGAs"}',
@@ -207,10 +230,10 @@ def compliance_report(request):
             'total_disease_reports': reports_qs.count(),
             'total_consultations': total_consultations,
             'vaccinations_completed': vaccinations_completed,
-            'drug_transactions': 0,
+            'drug_transactions': drug_transactions,
         },
         'disease_breakdown': [{'name': d['disease'] or 'Unknown', 'count': d['count']} for d in disease_breakdown],
-        'lga_breakdown': [{'lga': d['lga'], 'farmers': d['farmers'], 'reports': d['reports']} for d in lga_breakdown],
+        'lga_breakdown': lga_breakdown,
         'export_url': '',
     })
 

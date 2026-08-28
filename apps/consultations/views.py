@@ -152,6 +152,50 @@ class ConsultationRequestViewSet(viewsets.ModelViewSet):
         except Exception:
             vet_map = {}
 
+        def _vet_specialty(v):
+            if not v:
+                return 'General Vet'
+            specs = getattr(v, 'specializations', None)
+            if isinstance(specs, (list, tuple)) and specs:
+                first = specs[0]
+                return str(first) if first else 'General Vet'
+            if isinstance(specs, str) and specs.strip():
+                # Might be JSON string or comma-separated
+                try:
+                    import json as _json
+                    parsed = _json.loads(specs)
+                    if isinstance(parsed, list) and parsed:
+                        return str(parsed[0])
+                except Exception:
+                    pass
+                return specs.split(',')[0].strip() or 'General Vet'
+            for alt in ('specialization', 'specialty'):
+                alt_val = getattr(v, alt, None)
+                if alt_val:
+                    return str(alt_val)
+            return 'General Vet'
+
+        def _vet_rating(v):
+            if not v:
+                return '4.5'
+            for key in ('rating', 'avg_rating', 'average_rating'):
+                val = getattr(v, key, None)
+                if val not in (None, ''):
+                    try:
+                        return str(float(val))
+                    except Exception:
+                        return str(val)
+            return '4.5'
+
+        def _vet_reviews(v):
+            if not v:
+                return 0
+            for key in ('total_consultations', 'reviews_count', 'consultations_completed'):
+                val = getattr(v, key, None)
+                if isinstance(val, int) and val >= 0:
+                    return val
+            return 0
+
         out = []
         for i, r in enumerate(rows):
             name = r['vet_name']
@@ -159,13 +203,13 @@ class ConsultationRequestViewSet(viewsets.ModelViewSet):
             out.append({
                 'vet_name': name,
                 'name': name,
-                'specialty': getattr(vet, 'specializations', ['General Vet'])[0] if vet and getattr(vet, 'specializations', None) else 'General Vet',
+                'specialty': _vet_specialty(vet),
                 'lga': getattr(vet, 'lga', '') if vet else '',
                 'consultations': r['consultations'],
                 'consultations_completed': r['consultations'],
-                'avg_rating': str(getattr(vet, 'rating', '4.5') or '4.5') if vet else '4.5',
-                'rating': str(getattr(vet, 'rating', '4.5') or '4.5') if vet else '4.5',
-                'reviews_count': getattr(vet, 'total_consultations', 0) if vet else 0,
+                'avg_rating': _vet_rating(vet),
+                'rating': _vet_rating(vet),
+                'reviews_count': _vet_reviews(vet),
                 'badge': 'Gold' if i == 0 else 'Silver' if i == 1 else 'Bronze' if i == 2 else '',
             })
         return Response(out)
