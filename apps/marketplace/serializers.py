@@ -12,6 +12,7 @@ from .models import (
     MarketplaceConversation,
     MarketplaceMessage,
     MarketplaceRating,
+    MarketplaceDelivery,
 )
 
 
@@ -134,3 +135,19 @@ class MarketplaceMessageSerializer(serializers.ModelSerializer):
         model = MarketplaceMessage
         fields = ('id', 'conversation', 'sender', 'content', 'attachment', 'created_at', 'read')
         read_only_fields = ('sender', 'created_at')
+
+
+class MarketplaceDeliverySerializer(serializers.ModelSerializer):
+    buyer = serializers.StringRelatedField(read_only=True)
+    seller = serializers.StringRelatedField(read_only=True)
+    listing_title = serializers.CharField(source='listing.title', read_only=True)
+
+    class Meta:
+        model = MarketplaceDelivery
+        fields = (
+            'id', 'listing', 'listing_title', 'buyer', 'seller', 'status',
+            'delivery_address', 'delivery_fee', 'escrow_amount', 'escrow_released',
+            'tracking_updates', 'estimated_delivery', 'actual_delivery',
+            'quantity', 'total_price', 'created_at', 'updated_at',
+        )
+        read_only_fields = ('buyer', 'seller', 'escrow_amount', 'escrow_released', 'created_at', 'updated_at')

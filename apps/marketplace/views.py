@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db import models
 from django.db.models import Count
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import (
@@ -319,10 +320,66 @@ class MarketplaceRatingViewSet(viewsets.ModelViewSet):
         serializer.save(reviewer=self.request.user, listing=listing)
 
 
+class MarketplaceDeliveryViewSet(viewsets.ModelViewSet):
+    serializer_class = MarketplaceDeliverySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status']
+    search_fields = ['listing__title', 'delivery_address']
+
+    def get_queryset(self):
+        user = self.request.user
+        return MarketplaceDelivery.objects.filter(
+            models.Q(buyer=user) | models.Q(seller=user)
+        ).select_related('listing').order_by('-created_at')
+
+    def perform_create(self, serializer):
+        listing = serializer.validated_data['listing']
+        serializer.save(
+            buyer=self.request.user,
+            seller=listing.seller,
+            escrow_amount=serializer.validated_data.get('total_price', 0),
+        )
+
+    @action(detail=True, methods=['patch'], url_path='status')
+    def update_status(self, request, pk=None):
+        delivery = self.get_object()
+        # Only seller or admin can advance delivery status
+        if delivery.seller_id != request.user.id and not request.user.is_superuser:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Only the seller can update delivery status.')
+        new_status = request.data.get('status')
+        valid = [c for c, _ in MarketplaceDelivery.StatusChoices.choices]
+        if new_status not in valid:
+            return Response({'detail': f'status must be one of {", ".join(valid)}'}, status=status.HTTP_400_BAD_REQUEST)
+        delivery.status = new_status
+        updates = delivery.tracking_updates or []
+        updates.append({'timestamp': str(timezone.now().isoformat()), 'status': new_status, 'note': request.data.get('note', '')})
+        delivery.tracking_updates = updates
+        if new_status == MarketplaceDelivery.StatusChoices.DELIVERED:
+            from datetime import date as _date
+            delivery.actual_delivery = _date.today()
+        delivery.save(update_fields=['status', 'tracking_updates', 'actual_delivery', 'updated_at'])
+        from .serializers import MarketplaceDeliverySerializer as _Ser
+        return Response(_Ser(delivery).data)
+
+
+# Back-compat alias — single-list endpoint at /api/v1/marketplace/deliveries/
+# Kept for legacy frontends; the ViewSet below is the canonical CRUD endpoint.
 class MarketplaceDeliveriesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Placeholder: deliveries are tracked via MarketplaceConversation states;
-        # return empty until fulfillment workflow is modeled.
-        return Response([])
+        qs = MarketplaceDelivery.objects.filter(
+            models.Q(buyer=request.user) | models.Q(seller=request.user)
+        ).select_related('listing').order_by('-created_at')
+        from .serializers import MarketplaceDeliverySerializer as _Ser
+        return Response(_Ser(qs, many=True).data)
+
+    def post(self, request):
+        from .serializers import MarketplaceDeliverySerializer as _Ser
+        ser = _Ser(data=request.data, context={'request': request})
+        ser.is_valid(raise_exception=True)
+        listing = ser.validated_data['listing']
+        ser.save(buyer=request.user, seller=listing.seller, escrow_amount=ser.validated_data.get('total_price', 0))
+        return Response(ser.data, status=status.HTTP_201_CREATED)

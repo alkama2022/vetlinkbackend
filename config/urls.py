@@ -57,6 +57,7 @@ from apps.marketplace.views import (
     MarketplaceConversationViewSet,
     MarketplaceMessageViewSet,
     MarketplaceRatingViewSet,
+    MarketplaceDeliveryViewSet,
     MarketplaceDeliveriesView,
 )
 from apps.payments.views import (
