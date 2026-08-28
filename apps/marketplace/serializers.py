@@ -17,21 +17,52 @@ from .models import (
 
 
 class MarketplaceImageSerializer(serializers.ModelSerializer):
+    file = serializers.SerializerMethodField()
+
     class Meta:
         model = MarketplaceImage
         fields = ('id', 'file', 'alt_text', 'order')
 
+    def get_file(self, obj):
+        request = self.context.get('request')
+        if obj.file:
+            return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+        return None
+
 
 class MarketplaceVideoSerializer(serializers.ModelSerializer):
+    file = serializers.SerializerMethodField()
+    thumbnail = serializers.SerializerMethodField()
+
     class Meta:
         model = MarketplaceVideo
         fields = ('id', 'file', 'thumbnail')
 
+    def get_file(self, obj):
+        request = self.context.get('request')
+        if obj.file:
+            return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+        return None
+
+    def get_thumbnail(self, obj):
+        request = self.context.get('request')
+        if obj.thumbnail:
+            return request.build_absolute_uri(obj.thumbnail.url) if request else obj.thumbnail.url
+        return None
+
 
 class MarketplaceDocumentSerializer(serializers.ModelSerializer):
+    file = serializers.SerializerMethodField()
+
     class Meta:
         model = MarketplaceDocument
         fields = ('id', 'file', 'doc_type')
+
+    def get_file(self, obj):
+        request = self.context.get('request')
+        if obj.file:
+            return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+        return None
 
 
 class MarketplaceCategorySerializer(serializers.ModelSerializer):
