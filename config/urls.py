@@ -24,7 +24,12 @@ from apps.appointments.views import AppointmentViewSet
 from apps.consultations.views import ConsultationRequestViewSet
 from apps.pharmacy.views import DrugStockViewSet, MedicineFinderViewSet
 from apps.laboratory.views import LabSampleViewSet
-from apps.surveillance.views import DiseaseReportViewSet, surveillance_kpis
+from apps.surveillance.views import (
+    DiseaseReportViewSet,
+    surveillance_kpis,
+    compliance_report,
+    compliance_report_export,
+)
 from apps.surveillance.weather_risk import WeatherDiseaseRiskView
 from apps.surveillance.heatmap import OutbreakHeatmapView
 from apps.billing.views import InvoiceViewSet
@@ -139,6 +144,8 @@ urlpatterns = [
 
     # Surveillance KPIs & Analytics Endpoint
     path('api/v1/surveillance/kpis/', surveillance_kpis, name='surveillance_kpis'),
+    path('api/v1/surveillance/compliance-report/', compliance_report, name='compliance_report'),
+    path('api/v1/surveillance/compliance-report/export/', compliance_report_export, name='compliance_report_export'),
 
     # Weather Disease Risk Alerts
     path('api/v1/surveillance/weather-risks/', WeatherDiseaseRiskView.as_view(), name='weather_disease_risks'),

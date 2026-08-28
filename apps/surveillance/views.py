@@ -134,6 +134,114 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
         return Response(DiseaseReportSerializer(report).data, status=status.HTTP_200_OK)
 
 
+from apps.core.permissions import IsGovernmentOfficerOrAdmin as _GovPerm  # noqa: F401
+
+
+@extend_schema(request=None, responses={200: OpenApiTypes.OBJECT})
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def compliance_report(request):
+    """Government compliance analytics — aggregated herd/vet/disease stats."""
+    lga = request.query_params.get('lga')
+    date_from = request.query_params.get('date_from')
+    date_to = request.query_params.get('date_to')
+
+    reports_qs = DiseaseReport.objects.all()
+    if lga:
+        reports_qs = reports_qs.filter(lga=lga)
+    if date_from:
+        try:
+            from datetime import datetime
+            reports_qs = reports_qs.filter(submitted_at__gte=datetime.fromisoformat(date_from))
+        except Exception:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime
+            reports_qs = reports_qs.filter(submitted_at__lte=datetime.fromisoformat(date_to))
+        except Exception:
+            pass
+
+    try:
+        from apps.accounts.models import User
+        from apps.veterinarians.models import Veterinarian
+        total_farmers = User.objects.filter(user_type='FARMER').count()
+        total_vets = Veterinarian.objects.count()
+        if total_vets == 0:
+            total_vets = User.objects.filter(user_type='VETERINARIAN').count()
+    except Exception:
+        total_farmers = 0
+        total_vets = 0
+
+    try:
+        from apps.consultations.models import ConsultationRequest
+        total_consultations = ConsultationRequest.objects.count()
+    except Exception:
+        total_consultations = 0
+
+    try:
+        from apps.vaccinations.models import VaccinationRecord
+        vaccinations_completed = VaccinationRecord.objects.count()
+    except Exception:
+        vaccinations_completed = 0
+
+    total_animals = reports_qs.aggregate(s=Sum('affected'))['s'] or 0
+    disease_breakdown = list(
+        reports_qs.values('disease').annotate(count=Count('id')).order_by('-count')[:10]
+    )
+    lga_breakdown = list(
+        reports_qs.values('lga').annotate(reports=Count('id')).order_by('-reports')[:10]
+    )
+    for item in lga_breakdown:
+        item['farmers'] = 0  # placeholder — fill when farmer-LGA model exists
+
+    return Response({
+        'title': f'Compliance Report — {lga or "All LGAs"}',
+        'generated_at': date.today().isoformat(),
+        'lga': lga or 'All LGAs',
+        'period': f'{date_from or "—"} to {date_to or "—"}',
+        'summary': {
+            'total_farmers': total_farmers,
+            'total_animals': total_animals,
+            'total_vets': total_vets,
+            'total_disease_reports': reports_qs.count(),
+            'total_consultations': total_consultations,
+            'vaccinations_completed': vaccinations_completed,
+            'drug_transactions': 0,
+        },
+        'disease_breakdown': [{'name': d['disease'] or 'Unknown', 'count': d['count']} for d in disease_breakdown],
+        'lga_breakdown': [{'lga': d['lga'], 'farmers': d['farmers'], 'reports': d['reports']} for d in lga_breakdown],
+        'export_url': '',
+    })
+
+
+@extend_schema(request=None, responses={200: OpenApiTypes.OBJECT})
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def compliance_report_export(request):
+    """Export compliance report as PDF stub (downloads a text PDF when reportlab available, else JSON)."""
+    from django.http import HttpResponse
+    try:
+        from reportlab.pdfgen import canvas  # type: ignore
+        from reportlab.lib.pagesizes import A4  # type: ignore
+        import io
+        buf = io.BytesIO()
+        c = canvas.Canvas(buf, pagesize=A4)
+        c.setFont('Helvetica-Bold', 14)
+        c.drawString(40, 800, 'VetLink Kano — Compliance Report')
+        c.setFont('Helvetica', 10)
+        c.drawString(40, 780, f"Generated: {date.today().isoformat()}")
+        c.drawString(40, 760, f"Filters: lga={request.query_params.get('lga','All')}")
+        c.showPage()
+        c.save()
+        buf.seek(0)
+        resp = HttpResponse(buf.getvalue(), content_type='application/pdf')
+        resp['Content-Disposition'] = 'attachment; filename="compliance-report.pdf"'
+        return resp
+    except ImportError:
+        return Response({'detail': 'PDF export not available on this server. Use print instead.'}, status=501)
+
+
 @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT})
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

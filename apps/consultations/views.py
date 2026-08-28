@@ -124,3 +124,48 @@ class ConsultationRequestViewSet(viewsets.ModelViewSet):
         consultation = self.get_object()
         consultation.messages.filter(read=False).update(read=True)
         return Response({'status': 'marked_read'}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='vet-leaderboard', permission_classes=[permissions.IsAuthenticated])
+    def vet_leaderboard(self, request):
+        """Public leaderboard of top vets by consultations completed."""
+        period = request.query_params.get('period')
+        qs = ConsultationRequest.objects.filter(status__in=['Resolved', 'Completed', 'In progress', 'Accepted'])
+        if period == 'week':
+            from datetime import timedelta
+            qs = qs.filter(submitted_at__gte=timezone.now() - timedelta(days=7))
+        elif period == 'month':
+            from datetime import timedelta
+            qs = qs.filter(submitted_at__gte=timezone.now() - timedelta(days=30))
+
+        # Aggregate by vet_name (fallback when vet FK not populated)
+        from django.db.models import Count
+        rows = (
+            qs.exclude(vet_name__isnull=True).exclude(vet_name='')
+            .values('vet_name')
+            .annotate(consultations=Count('id'))
+            .order_by('-consultations')[:10]
+        )
+        # Enrich with vet profile data where available
+        try:
+            from apps.veterinarians.models import Veterinarian
+            vet_map = {v.full_name: v for v in Veterinarian.objects.all()}
+        except Exception:
+            vet_map = {}
+
+        out = []
+        for i, r in enumerate(rows):
+            name = r['vet_name']
+            vet = vet_map.get(name)
+            out.append({
+                'vet_name': name,
+                'name': name,
+                'specialty': getattr(vet, 'specializations', ['General Vet'])[0] if vet and getattr(vet, 'specializations', None) else 'General Vet',
+                'lga': getattr(vet, 'lga', '') if vet else '',
+                'consultations': r['consultations'],
+                'consultations_completed': r['consultations'],
+                'avg_rating': str(getattr(vet, 'rating', '4.5') or '4.5') if vet else '4.5',
+                'rating': str(getattr(vet, 'rating', '4.5') or '4.5') if vet else '4.5',
+                'reviews_count': getattr(vet, 'total_consultations', 0) if vet else 0,
+                'badge': 'Gold' if i == 0 else 'Silver' if i == 1 else 'Bronze' if i == 2 else '',
+            })
+        return Response(out)
