@@ -193,6 +193,10 @@ urlpatterns = [
     path('api/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
-if settings.DEBUG:
-    from django.conf.urls.static import static
+from django.conf.urls.static import static
+
+# Serve user-uploaded media in both debug and production (small-scale Render deploy).
+# In larger production use S3/R2, but for VetLink Kano MVP the local MEDIA_ROOT
+# persisted on Render disk is sufficient and WhiteNoise does not handle MEDIA.
+if not getattr(settings, "TESTING", False):
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
