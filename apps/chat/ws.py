@@ -13,6 +13,9 @@ def user_group(user_id):
 async def abroadcast_to_users(user_ids, event):
     """Send an event dict to each user's personal channel group (async)."""
     layer = get_channel_layer()
+    # Normalize broadcast type to underscore if present (Channels routing)
+    if 'type' in event and isinstance(event['type'], str):
+        event = {**event, 'type': event['type'].replace('.', '_')}
     for uid in user_ids:
         await layer.group_send(user_group(uid), event)
 

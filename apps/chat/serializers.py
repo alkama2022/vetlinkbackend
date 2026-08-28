@@ -136,6 +136,7 @@ class ConversationSerializer(serializers.ModelSerializer):
             'id': msg.id,
             'external_id': str(msg.external_id),
             'content_type': msg.message_type,
+            'message_type': msg.message_type,
             'sender_id': str(msg.sender_id),
             'content': (msg.content or '')[:180],
             'created_at': msg.created_at.isoformat(),
@@ -155,17 +156,30 @@ class ConversationSerializer(serializers.ModelSerializer):
 
 
 class ConversationCreateSerializer(serializers.Serializer):
-    user_id = serializers.CharField(required=True)
+    user_id = serializers.CharField(required=False, allow_blank=True)
+    participants = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=True
+    )
     title = serializers.CharField(required=False, allow_blank=True)
+    type = serializers.CharField(required=False, allow_blank=True, default='direct')
 
-    def validate_user_id(self, value):
+    def validate(self, attrs):
+        user_id = attrs.get('user_id')
+        participants = attrs.get('participants') or []
+        # Accept both formats: {user_id: "<id>"} and {participants: ["<id>"]}
+        target_id = user_id or (participants[0] if participants else None)
+        if not target_id:
+            raise serializers.ValidationError({'user_id': 'User id is required (user_id or participants[0]).'})
         try:
-            return User.objects.get(pk=value)
+            user = User.objects.get(pk=target_id)
         except (User.DoesNotExist, ValueError):
-            raise serializers.ValidationError('No user found with that id.')
+            raise serializers.ValidationError({'user_id': 'No user found with that id.'})
+        attrs['user_obj'] = user
+        return attrs
 
 
 class MessageCreateSerializer(serializers.Serializer):
+    conversation = serializers.CharField(required=False, allow_blank=True)
     conversation_id = serializers.CharField(required=False, allow_blank=True)
     content = serializers.CharField(required=False, allow_blank=True)
     message_type = serializers.CharField(required=False, default='message')
@@ -178,6 +192,12 @@ class MessageCreateSerializer(serializers.Serializer):
     attachments = serializers.ListField(
         required=False, allow_empty=True, default=list, child=serializers.FileField()
     )
+
+    def validate(self, attrs):
+        # Normalize conversation alias: frontend sends `conversation`, backend expects `conversation_id`
+        if not attrs.get('conversation_id') and attrs.get('conversation'):
+            attrs['conversation_id'] = attrs['conversation']
+        return attrs
 
 
 def get_or_create_direct_conversation(user_a, user_b):

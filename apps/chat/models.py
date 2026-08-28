@@ -81,6 +81,8 @@ class Message(models.Model):
         MESSAGE = 'message', 'Text'
         IMAGE = 'image', 'Image'
         VIDEO = 'video', 'Video'
+        VOICE = 'voice', 'Voice note'
+        AUDIO = 'audio', 'Audio'
         DOCUMENT = 'document', 'Document'
         ANIMAL = 'animal', 'Animal photo/info'
         LAB_RECORD = 'lab_record', 'Laboratory record'

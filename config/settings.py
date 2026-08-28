@@ -184,10 +184,13 @@ if REDIS_URL:
     }
 
 # Chat security constants
-MAX_UPLOAD_SIZE = int(os.getenv('CHAT_MAX_UPLOAD_SIZE', 8 * 1024 * 1024))  # 8 MB per file
+MAX_UPLOAD_SIZE = int(os.getenv('CHAT_MAX_UPLOAD_SIZE', 15 * 1024 * 1024))  # 15 MB per file (video/voice)
 CHAT_ALLOWED_UPLOADS = (
     'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-    'video/mp4', 'application/pdf',
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/ogg',
+    'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp3', 'audio/mp4',
+    'audio/wav', 'audio/x-wav', 'audio/webm;codecs=opus',
+    'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 )

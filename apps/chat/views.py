@@ -37,20 +37,27 @@ def _participant_ids(conversation):
 
 
 def _broadcast(kind, payload, user_ids):
-    broadcast_to_users(user_ids, {'type': kind, 'payload': payload})
+    # Channels dispatcher expects underscored type names; normalize dots to underscores
+    channel_type = kind.replace('.', '_')
+    broadcast_to_users(user_ids, {'type': channel_type, 'payload': payload})
 
 
 def _kind_for_upload(uploaded, kinds, index):
     mime = getattr(uploaded, 'content_type', '')
     if index < len(kinds):
         label = str(kinds[index])
-        if label in ('image', 'video', 'document', 'animal',
+        if label in ('image', 'video', 'voice', 'audio', 'document', 'animal',
                      'lab_record', 'disease_report', 'prescription'):
+            # normalize voice/audio
+            if label in ('voice', 'audio'):
+                return 'voice'
             return label
     if mime.startswith('image/'):
         return 'image'
     if mime.startswith('video/'):
         return 'video'
+    if mime.startswith('audio/'):
+        return 'voice'
     return 'document'
 
 
@@ -61,7 +68,14 @@ def _validate_upload(uploaded):
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     ))
-    mime = getattr(uploaded, 'content_type', 'application/octet-stream')
+    mime = getattr(uploaded, 'content_type', 'application/octet-stream') or ''
+    # Normalize audio mime parameters like "audio/webm;codecs=opus"
+    base_mime = mime.split(';')[0].strip().lower()
+    if base_mime in [a.lower() for a in allowed]:
+        return True
+    # Fallback: accept any image/video/audio prefix if not explicitly listed but reasonable
+    if base_mime.startswith('image/') or base_mime.startswith('video/') or base_mime.startswith('audio/'):
+        return True
     return mime in allowed
 
 
@@ -83,7 +97,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = ConversationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        other = serializer.validated_data['user_id']
+        other = serializer.validated_data.get('user_obj') or serializer.validated_data.get('user_id')
 
         if is_blocked(request.user, other):
             return Response(
@@ -184,10 +198,44 @@ class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.none()
 
     def get_queryset(self):
-        return (
-            Message.objects.filter(conversation__participants__user=self.request.user)
-            .distinct()
-        )
+        qs = Message.objects.filter(conversation__participants__user=self.request.user).distinct()
+        conversation_id = self.request.query_params.get('conversation') or self.request.query_params.get('conversation_id')
+        if conversation_id:
+            try:
+                qs = qs.filter(conversation_id=conversation_id)
+            except Exception:
+                pass
+        # Search within conversation if q provided
+        q = self.request.query_params.get('q')
+        if q:
+            qs = qs.filter(content__icontains=q.strip())
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        """Paginated list: ?conversation=<id>&page=&page_size= or cursor ?before="""
+        qs = self.get_queryset().select_related('sender').prefetch_related('attachments', 'read_receipts')
+        # Cursor-based if before param present, else standard ordering
+        before = request.query_params.get('before')
+        if before:
+            try:
+                qs = qs.filter(id__lt=int(before))
+            except (ValueError, TypeError):
+                pass
+            limit = int(request.query_params.get('limit', MESSAGE_PAGE_SIZE))
+            limit = max(1, min(limit, 100))
+            page = list(qs.order_by('-id')[:limit][::-1])
+            has_more = False
+            if page:
+                has_more = qs.filter(id__lt=page[0].id).exists()
+            return Response({
+                'results': [MessageSerializer(m, context={'request': request}).data for m in page],
+                'count': len(page),
+                'has_more': bool(has_more),
+                'before': page[0].id if page else None,
+            })
+        # Default: order by id ascending and paginate via page params
+        qs = qs.order_by('id')
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         serializer = MessageCreateSerializer(data=request.data)
