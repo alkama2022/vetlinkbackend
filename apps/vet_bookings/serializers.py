@@ -20,13 +20,14 @@ class VetBookingSerializer(serializers.ModelSerializer):
     startTime = serializers.TimeField(source='availability.start_time', read_only=True)
     endTime = serializers.TimeField(source='availability.end_time', read_only=True)
     animalName = serializers.CharField(source='animal_name')
-    consultationFee = serializers.DecimalField(source='consultation_fee', max_digits=10, decimal_places=2)
+    consultationFee = serializers.DecimalField(source='consultation_fee', max_digits=10, decimal_places=2, read_only=True)
+    availability = serializers.PrimaryKeyRelatedField(queryset=VetAvailability.objects.all(), write_only=True, required=True)
 
     class Meta:
         model = VetBooking
         fields = [
             'id', 'bookingCode', 'farmer', 'farmerName', 'vet', 'vetName', 'vetId',
-            'date', 'startTime', 'endTime', 'animalName', 'species', 'reason',
+            'availability', 'date', 'startTime', 'endTime', 'animalName', 'species', 'reason',
             'status', 'notes', 'consultationFee', 'created_at',
         ]
-        read_only_fields = ['id', 'bookingCode', 'farmer', 'status', 'created_at']
+        read_only_fields = ['id', 'bookingCode', 'farmer', 'status', 'created_at', 'vet']
