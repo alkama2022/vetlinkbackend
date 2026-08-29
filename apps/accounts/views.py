@@ -41,17 +41,16 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             data = response.data or {}
             access = data.get('access')
             refresh = data.get('refresh')
-            is_secure = not settings.DEBUG
-            # Cross-site frontend (vercel.app -> onrender.com) requires SameSite=None; Secure
-            # Lax blocks cookies on cross-site XHR, causing login loop.
-            samesite = 'None' if not settings.DEBUG else 'Lax'
-            # None requires Secure, so force secure when samesite is None
-            if samesite == 'None':
+            # Env override for local http dev: AUTH_COOKIE_SAMESITE=Lax
+            # Default None for cross-site prod (vercel.app -> onrender.com) — Lax blocks XHR cookies
+            import os
+            samesite = os.getenv('AUTH_COOKIE_SAMESITE', 'None')
+            is_secure = True if samesite.lower() == 'none' else (not settings.DEBUG)
+            if samesite.lower() == 'none':
                 is_secure = True
             if access:
                 response.set_cookie('access_token', access, httponly=True, secure=is_secure, samesite=samesite, max_age=15*60, path='/')
             if refresh:
-                # Use path=/ so refresh works reliably across clients; legacy /api/v1/auth/ also cleared on logout
                 response.set_cookie('refresh_token', refresh, httponly=True, secure=is_secure, samesite=samesite, max_age=24*3600, path='/')
         except Exception:
             pass
@@ -296,15 +295,16 @@ class LogoutView(APIView):
         )
         resp = Response({'detail': 'Logged out successfully.'}, status=status.HTTP_200_OK)
         try:
-            is_secure = not settings.DEBUG
-            samesite = 'None' if not settings.DEBUG else 'Lax'
-            if samesite == 'None':
-                is_secure = True
-            # Must match samesite/secure/path used when setting, else browser keeps cookies
+            import os
+            samesite = os.getenv('AUTH_COOKIE_SAMESITE', 'None')
+            is_secure = True if samesite.lower() == 'none' else (not settings.DEBUG)
             resp.delete_cookie('access_token', path='/', samesite=samesite)
             resp.delete_cookie('refresh_token', path='/api/v1/auth/', samesite=samesite)
             resp.delete_cookie('refresh_token', path='/', samesite=samesite)
-            # Also try without samesite for legacy cookies
+            # Also clear Lax legacy
+            resp.delete_cookie('access_token', path='/', samesite='Lax')
+            resp.delete_cookie('refresh_token', path='/api/v1/auth/', samesite='Lax')
+            resp.delete_cookie('refresh_token', path='/', samesite='Lax')
             resp.delete_cookie('access_token', path='/')
             resp.delete_cookie('refresh_token', path='/api/v1/auth/')
             resp.delete_cookie('refresh_token', path='/')
@@ -344,13 +344,12 @@ class VetLoginView(TokenObtainPairView):
 
     def _set_auth_cookies(self, response):
         try:
+            import os
             data = response.data or {}
             access = data.get('access')
             refresh = data.get('refresh')
-            is_secure = not settings.DEBUG
-            samesite = 'None' if not settings.DEBUG else 'Lax'
-            if samesite == 'None':
-                is_secure = True
+            samesite = os.getenv('AUTH_COOKIE_SAMESITE', 'None')
+            is_secure = True if samesite.lower() == 'none' else (not settings.DEBUG)
             if access:
                 response.set_cookie('access_token', access, httponly=True, secure=is_secure, samesite=samesite, max_age=15*60, path='/')
             if refresh:
@@ -408,10 +407,9 @@ class CookieTokenRefreshView(TokenRefreshView):
             # Let parent handle cookie set for new access/refresh
             response = Response(data, status=status.HTTP_200_OK)
             try:
-                is_secure = not settings.DEBUG
-                samesite = 'None' if not settings.DEBUG else 'Lax'
-                if samesite == 'None':
-                    is_secure = True
+                import os
+                samesite = os.getenv('AUTH_COOKIE_SAMESITE', 'None')
+                is_secure = True if samesite.lower() == 'none' else (not settings.DEBUG)
                 if 'access' in data:
                     response.set_cookie('access_token', data['access'], httponly=True, secure=is_secure, samesite=samesite, max_age=15*60, path='/')
                 if 'refresh' in data:
@@ -423,11 +421,10 @@ class CookieTokenRefreshView(TokenRefreshView):
         response = super().post(request, *args, **kwargs)
         try:
             if response.status_code == 200:
+                import os
                 data = response.data or {}
-                is_secure = not settings.DEBUG
-                samesite = 'None' if not settings.DEBUG else 'Lax'
-                if samesite == 'None':
-                    is_secure = True
+                samesite = os.getenv('AUTH_COOKIE_SAMESITE', 'None')
+                is_secure = True if samesite.lower() == 'none' else (not settings.DEBUG)
                 if 'access' in data:
                     response.set_cookie('access_token', data['access'], httponly=True, secure=is_secure, samesite=samesite, max_age=15*60, path='/')
                 if 'refresh' in data:
