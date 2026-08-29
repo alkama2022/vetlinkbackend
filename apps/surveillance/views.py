@@ -77,9 +77,33 @@ def _strip_exif_and_reencode(image_bytes: bytes, content_type: str) -> bytes:
         img.save(out, format=fmt, quality=85, optimize=True)
         return out.getvalue()
     except Exception:
-        # If Pillow not available or decode fails, fall back to raw but still strip by returning raw
-        # Caller will still validate magic bytes; image may retain EXIF in fallback but is limited
         return image_bytes
+
+
+def _make_thumbnail(source_path: str, directory: str, filename: str) -> None:
+    """Generate 400px WebP thumbnail alongside original for listing cards. No-op on failure."""
+    try:
+        from PIL import Image
+        import io
+        src = os.path.join(directory, filename)
+        with Image.open(src) as im:
+            # Only thumbnail images; videos already skipped
+            if im.format not in ('JPEG', 'JPG', 'PNG', 'WEBP', 'GIF'):
+                return
+            im.thumbnail((400, 400))
+            if im.mode in ('P',):
+                im = im.convert('RGB')
+            thumb_name = f"thumb_400_{os.path.splitext(filename)[0]}.webp"
+            im.save(os.path.join(directory, thumb_name), format='WEBP', quality=75, method=4)
+            # Also 800px variant for detail view
+            with Image.open(src) as im2:
+                im2.thumbnail((800, 800))
+                if im2.mode in ('P',):
+                    im2 = im2.convert('RGB')
+                thumb800 = f"thumb_800_{os.path.splitext(filename)[0]}.webp"
+                im2.save(os.path.join(directory, thumb800), format='WEBP', quality=80, method=4)
+    except Exception:
+        pass
 
 
 def _save_report_photo(uploaded):
@@ -109,6 +133,7 @@ def _save_report_photo(uploaded):
         filename = f"{uuid.uuid4().hex}{ext}"
         with open(os.path.join(directory, filename), 'wb') as dest:
             dest.write(data)
+        _make_thumbnail(subdir, directory, filename)
         return f"{subdir}/{filename}"
     # Video: keep existing streaming path but validate size only
     ext = _CONTENT_TYPE_EXTENSIONS.get(content_type, '.bin')

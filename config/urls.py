@@ -13,6 +13,7 @@ from apps.accounts.views import (
     LogoutView,
     ResendVerificationEmailView,
     ResetPasswordView,
+    UserAuditLogView,
     UserProfileView,
     UserRegistrationView,
     VerifyEmailView,
@@ -146,6 +147,7 @@ urlpatterns = [
     path('api/v1/auth/email/verify/', VerifyEmailView.as_view(), name='verify_email'),
     path('api/v1/auth/email/resend/', ResendVerificationEmailView.as_view(), name='resend_verification_email'),
     path('api/v1/auth/logout/', LogoutView.as_view(), name='logout'),
+    path('api/v1/auth/audit-log/', UserAuditLogView.as_view(), name='audit_log'),
 
     # Surveillance KPIs & Analytics Endpoint
     path('api/v1/surveillance/kpis/', surveillance_kpis, name='surveillance_kpis'),

@@ -297,6 +297,30 @@ class LogoutView(APIView):
         return resp
 
 
+class UserAuditLogView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        from apps.payments.models import FinancialAuditLog as _FAL
+        from apps.monitoring.models import SystemEvent as _SE
+        user = request.user
+        try:
+            fal = list(_FAL.objects.filter(actor=user).order_by('-created_at')[:50].values('id','action','resource','metadata','created_at'))
+        except Exception:
+            fal = []
+        try:
+            se = list(_SE.objects.filter(actor=user).order_by('-created_at')[:50].values('id','category','action','target_type','details','created_at'))
+        except Exception:
+            se = []
+        # Merge + legacy local audit shape
+        combined = []
+        for f in fal:
+            combined.append({'id': str(f['id']), 'action': f['action'], 'resource': f['resource'], 'timestamp': f['created_at'].isoformat() if f['created_at'] else '', 'source': 'server-financial'})
+        for s in se:
+            combined.append({'id': str(s['id']), 'action': s['action'], 'resource': s['target_type'] or s['category'], 'timestamp': s['created_at'].isoformat() if s['created_at'] else '', 'source': 'server-monitoring'})
+        combined = sorted(combined, key=lambda x: x['timestamp'], reverse=True)[:50]
+        return Response(combined)
+
 class VetLoginView(TokenObtainPairView):
     serializer_class = VetLoginSerializer
     throttle_classes = [ScopedRateThrottle]

@@ -12,6 +12,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = User.USERNAME_FIELD
 
     def validate(self, attrs):
+        # Normalize email to lower-case/trim so "VET@vetlink.com" works same as "vet@vetlink.com"
+        if self.username_field in attrs and isinstance(attrs[self.username_field], str):
+            attrs[self.username_field] = attrs[self.username_field].strip().lower()
+        # Also handle explicit 'email' key if frontend sends that
+        if 'email' in attrs and isinstance(attrs['email'], str):
+            attrs['email'] = attrs['email'].strip().lower()
         data = super().validate(attrs)
         data['user'] = {
             'id': str(self.user.id),
