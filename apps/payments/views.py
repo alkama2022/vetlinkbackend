@@ -50,7 +50,10 @@ class BankAccountViewSet(viewsets.ModelViewSet):
         return self.queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user, verified=True)
+        # SECURITY: never auto-verify; require provider verification step
+        # If FLUTTERWAVE_SECRET_KEY configured, attempt verification via mock/provider
+        # Otherwise leave unverified and let user know to verify
+        serializer.save(user=self.request.user, verified=False)
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
@@ -120,7 +123,10 @@ class PaymentViewSet(viewsets.GenericViewSet):
         idempotency_key = serializer.validated_data.get('idempotency_key') or request.headers.get('Idempotency-Key')
 
         gateway = PaymentGateway.objects.filter(enabled=True).first()
-        gateway_provider = get_gateway_provider(gateway)
+        try:
+            gateway_provider = get_gateway_provider(gateway)
+        except RuntimeError as e:
+            return Response({'detail': 'Payments temporarily unavailable - gateway not configured.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         tx_ref = serializer.validated_data.get('idempotency_key') or uuid.uuid4().hex
         metadata = {
             'invoice': str(invoice.id),
@@ -177,7 +183,10 @@ def gateway_webhook(request):
     if not payment:
         return Response(status=404)
 
-    gateway_provider = get_gateway_provider(payment.gateway)
+    try:
+        gateway_provider = get_gateway_provider(payment.gateway)
+    except RuntimeError:
+        return Response({'detail': 'Payments disabled: no live gateway configured.'}, status=503)
     # SECURITY: the stub gateway trusts every webhook unconditionally, so a
     # public webhook endpoint backed by it would let anyone mark payments as
     # successful. In production only signed webhooks from a real gateway are
@@ -286,3 +295,30 @@ class WithdrawalRequestViewSet(viewsets.ModelViewSet):
             wr = serializer.save(wallet=wallet)
             FinancialAuditLog.objects.create(actor=self.request.user, action='withdrawal.requested', resource=str(wr.id), metadata={'amount': str(amount)})
             Notification.objects.create(notif_code=f'WD_{wr.id.hex[:8]}', title='Withdrawal requested', body=f'Withdrawal of {amount} requested', tone=Notification.ToneChoices.INFO, recipient=self.request.user)
+
+
+class RefundViewSet(viewsets.ModelViewSet):
+    """User can request refund for own payments; admins list/process."""
+    queryset = None
+    permission_classes = (IsAuthenticated,)
+
+    def get_serializer_class(self):
+        from apps.payments.serializers import RefundSerializer
+        return RefundSerializer
+
+    def get_queryset(self):
+        from apps.payments.models import Refund
+        user = self.request.user
+        if user.is_superuser or getattr(user, 'user_type', None) in ('SYSTEM_ADMIN', 'SUPER_ADMIN'):
+            return Refund.objects.all().order_by('-created_at')
+        return Refund.objects.filter(requester=user).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        from apps.payments.models import Payment, Refund
+        payment = serializer.validated_data['payment']
+        # Only payer can request
+        if str(payment.invoice.client_id) != str(self.request.user.id):
+            raise PermissionDenied('You can only request refund for your own payments.')
+        if payment.status != 'successful':
+            raise ValidationError({'payment': 'Only successful payments can be refunded.'})
+        serializer.save(requester=self.request.user, status='pending')

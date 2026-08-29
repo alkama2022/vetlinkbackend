@@ -98,9 +98,12 @@ class WithdrawalRequest(models.Model):
 class Refund(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     payment = models.ForeignKey(Payment, related_name='refunds', on_delete=models.CASCADE)
+    requester = models.ForeignKey('accounts.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='refund_requests')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField(blank=True, default='')
     processed_at = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='pending')
+    status = models.CharField(max_length=20, choices=[('pending','Pending'),('approved','Approved'),('rejected','Rejected'),('processed','Processed')], default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class FinancialAuditLog(models.Model):

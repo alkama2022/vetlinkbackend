@@ -5,6 +5,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
+import re as _re
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -28,7 +29,14 @@ PUBLIC_REGISTERABLE_ROLE = User.UserType.FARMER
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6)
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages)) from exc
+        return value
 
     class Meta:
         model = User
@@ -40,6 +48,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f'Public registration is only available for {PUBLIC_REGISTERABLE_ROLE} accounts.'
             )
+        return value
+
+    def validate_phone_number(self, value):
+        if value and not _re.match(r'^0\d{10}$', value.replace(" ", "").replace("-", "")):
+            raise serializers.ValidationError('Phone must be 11 digits starting with 0, e.g. 08012345678.')
         return value
 
     def validate(self, attrs):

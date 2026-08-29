@@ -107,12 +107,22 @@ class StubGateway(BaseGateway):
 
 
 def get_gateway_provider(gateway=None):
+    from django.conf import settings as _settings
+    import os
+    # In production fail-closed: no StubGateway if DEBUG=False
     if gateway and gateway.provider == 'flutterwave':
         config = gateway.config or {}
         return FlutterwaveGateway(
-            secret_key=config.get('secret_key'),
-            public_key=config.get('public_key'),
-            base_url=config.get('api_base'),
-            webhook_secret=config.get('webhook_secret'),
+            secret_key=config.get('secret_key') or getattr(_settings, 'FLUTTERWAVE_SECRET_KEY', ''),
+            public_key=config.get('public_key') or getattr(_settings, 'FLUTTERWAVE_PUBLIC_KEY', ''),
+            base_url=config.get('api_base') or getattr(_settings, 'FLUTTERWAVE_API_BASE', 'https://api.flutterwave.com/v3'),
+            webhook_secret=config.get('webhook_secret') or getattr(_settings, 'FLUTTERWAVE_WEBHOOK_SECRET', ''),
         )
-    return StubGateway()
+    # If no gateway configured but Flutterwave keys present globally, use it
+    _sk = getattr(_settings, 'FLUTTERWAVE_SECRET_KEY', '') or os.getenv('FLUTTERWAVE_SECRET_KEY', '')
+    if _sk and not getattr(_settings, 'DEBUG', False):
+        return FlutterwaveGateway()
+    if getattr(_settings, 'DEBUG', False) or getattr(_settings, 'TESTING', False):
+        return StubGateway()
+    # Production without gateway configured: raise so views return 503 fail-closed
+    raise RuntimeError("No payment gateway configured - set FLUTTERWAVE_SECRET_KEY or PaymentGateway.enabled")

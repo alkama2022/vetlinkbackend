@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from drf_spectacular.utils import extend_schema
 from drf_spectacular.types import OpenApiTypes
 
@@ -35,6 +36,19 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'auth'
 
+    def _set_auth_cookies(self, response):
+        try:
+            data = response.data or {}
+            access = data.get('access')
+            refresh = data.get('refresh')
+            is_secure = not settings.DEBUG
+            if access:
+                response.set_cookie('access_token', access, httponly=True, secure=is_secure, samesite='Lax', max_age=15*60, path='/')
+            if refresh:
+                response.set_cookie('refresh_token', refresh, httponly=True, secure=is_secure, samesite='Lax', max_age=24*3600, path='/api/v1/auth/')
+        except Exception:
+            pass
+
     def post(self, request, *args, **kwargs):
         email = (request.data.get('email') or '').strip().lower()
         response = None
@@ -43,7 +57,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         except Exception as exc:
             response = None
             if isinstance(exc, Throttled):
-                # Rate-limit violation -> security event (do NOT treat as bad password).
                 capture_error(
                     message='Login rate limit exceeded',
                     severity=LogSeverity.WARNING,
@@ -64,6 +77,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         if response is not None and response.status_code != 200:
             self._log_failure(request, email)
         elif response is not None:
+            self._set_auth_cookies(response)
             actor = User.objects.filter(email=email).first()
             record_event(
                 category='AUTH', action='auth.login',
@@ -154,11 +168,22 @@ class ChangePasswordView(APIView):
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data['new_password'])
         request.user.save(update_fields=['password'])
+        # Invalidate all refresh tokens for this user so stolen tokens die
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken as _RT
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+            for tok in OutstandingToken.objects.filter(user=request.user):
+                try:
+                    BlacklistedToken.objects.get_or_create(token=tok)
+                except Exception:
+                    continue
+        except Exception:
+            pass
         record_event(
             category='ACCOUNT', action='account.password_changed',
             actor=request.user, request=request,
         )
-        return Response({'detail': 'Password updated successfully.'}, status=status.HTTP_200_OK)
+        return Response({'detail': 'Password updated successfully. Please sign in again.'}, status=status.HTTP_200_OK)
 
 
 @extend_schema(request=ForgotPasswordSerializer, responses={200: OpenApiTypes.OBJECT})
@@ -250,23 +275,45 @@ class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
+        # Prefer refresh from body, fallback to httpOnly cookie
         try:
-            refresh_token = request.data['refresh']
-            token = RefreshToken(refresh_token)
-            token.blacklist()
+            refresh_token = request.data.get('refresh') or request.COOKIES.get('refresh_token')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
         except Exception:
             pass
         record_event(
             category='AUTH', action='auth.logout',
             actor=request.user, request=request,
         )
-        return Response({'detail': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+        resp = Response({'detail': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+        try:
+            resp.delete_cookie('access_token', path='/')
+            resp.delete_cookie('refresh_token', path='/api/v1/auth/')
+            resp.delete_cookie('refresh_token', path='/')
+        except Exception:
+            pass
+        return resp
 
 
 class VetLoginView(TokenObtainPairView):
     serializer_class = VetLoginSerializer
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'auth'
+
+    def _set_auth_cookies(self, response):
+        try:
+            data = response.data or {}
+            access = data.get('access')
+            refresh = data.get('refresh')
+            is_secure = not settings.DEBUG
+            if access:
+                response.set_cookie('access_token', access, httponly=True, secure=is_secure, samesite='Lax', max_age=15*60, path='/')
+            if refresh:
+                response.set_cookie('refresh_token', refresh, httponly=True, secure=is_secure, samesite='Lax', max_age=24*3600, path='/api/v1/auth/')
+        except Exception:
+            pass
 
     def post(self, request, *args, **kwargs):
         response = None
@@ -279,6 +326,7 @@ class VetLoginView(TokenObtainPairView):
         if response is not None and response.status_code != 200:
             self._log_failure(request)
         elif response is not None:
+            self._set_auth_cookies(response)
             record_event(category='AUTH', action='auth.vet_login', request=request)
         return response
 
@@ -294,4 +342,48 @@ class VetLoginView(TokenObtainPairView):
         )
         record_event(category='SECURITY', action='auth.vet_login_failed', request=request)
         mark_request_logged(request)
+
+
+class CookieTokenRefreshView(TokenRefreshView):
+    """Reads refresh token from httpOnly cookie if body missing."""
+    def post(self, request, *args, **kwargs):
+        refresh = request.data.get('refresh') or request.COOKIES.get('refresh_token')
+        if refresh and 'refresh' not in request.data:
+            mutable = request.data.copy()
+            mutable['refresh'] = refresh
+            request._full_data = mutable  # type: ignore
+            # DRF SimpleJWT reads from request.data['refresh']
+            try:
+                request.data['refresh'] = refresh  # type: ignore
+            except Exception:
+                pass
+            # Fallback: inject via serializer directly
+            serializer = TokenRefreshSerializer(data={'refresh': refresh})
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+            from rest_framework_simplejwt.tokens import RefreshToken as _RT2
+            # Let parent handle cookie set for new access/refresh
+            response = Response(data, status=status.HTTP_200_OK)
+            try:
+                is_secure = not settings.DEBUG
+                if 'access' in data:
+                    response.set_cookie('access_token', data['access'], httponly=True, secure=is_secure, samesite='Lax', max_age=15*60, path='/')
+                if 'refresh' in data:
+                    response.set_cookie('refresh_token', data['refresh'], httponly=True, secure=is_secure, samesite='Lax', max_age=24*3600, path='/api/v1/auth/')
+            except Exception:
+                pass
+            return response
+        # If cookie refresh present but not in body, still set cookie on rotation
+        response = super().post(request, *args, **kwargs)
+        try:
+            if response.status_code == 200:
+                data = response.data or {}
+                is_secure = not settings.DEBUG
+                if 'access' in data:
+                    response.set_cookie('access_token', data['access'], httponly=True, secure=is_secure, samesite='Lax', max_age=15*60, path='/')
+                if 'refresh' in data:
+                    response.set_cookie('refresh_token', data['refresh'], httponly=True, secure=is_secure, samesite='Lax', max_age=24*3600, path='/api/v1/auth/')
+        except Exception:
+            pass
+        return response
 

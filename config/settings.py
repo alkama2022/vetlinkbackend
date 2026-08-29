@@ -23,30 +23,37 @@ TESTING = 'test' in sys.argv[1:3] or 'PYTEST_CURRENT_TEST' in os.environ
 #     else:
 #         raise ImproperlyConfigured('The DJANGO_SECRET_KEY environment variable must be set in production.')
 
-SECRET_KEY = config(
-    "SECRET_KEY",
-    default="django-insecure-vetlink-kano-dev-key"
-)
+# SECURITY: SECRET_KEY must be set via env in production. In DEBUG we allow a dev fallback
+# but production boot must fail hard if insecure or missing.
+_raw_secret = config("SECRET_KEY", default="")
+if not _raw_secret:
+    if DEBUG or TESTING:
+        _raw_secret = "django-insecure-vetlink-kano-dev-key"
+    else:
+        raise ImproperlyConfigured(
+            "SECRET_KEY must be set via DJANGO_SECRET_KEY / SECRET_KEY env in production"
+        )
+if not DEBUG and not TESTING and _raw_secret.startswith("django-insecure"):
+    raise ImproperlyConfigured("Insecure SECRET_KEY not allowed in production")
+SECRET_KEY = _raw_secret
 
-# allowed_hosts = os.getenv('ALLOWED_HOSTS')
-# if allowed_hosts:
-#     ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
-# else:
-#     ALLOWED_HOSTS = ['localhost', '127.0.0.1'] if DEBUG else []
-
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    ".onrender.com",
-    "testserver",
-]
+# ALLOWED_HOSTS + FRONTEND_URL parsed early so later CORS block can reuse
+_extra_frontend = os.getenv("FRONTEND_URL", "").strip()
+_extra_origins = [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
+_extra_hosts = [h.strip() for h in os.getenv("ALLOWED_HOSTS_EXTRA", "").split(",") if h.strip()]
+_env_hosts = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+if _env_hosts:
+    ALLOWED_HOSTS = _env_hosts + _extra_hosts
+else:
+    _defaults = ["localhost", "127.0.0.1", ".onrender.com", "testserver"]
+    ALLOWED_HOSTS = _defaults + ([_extra_frontend.replace("https://","").replace("http://","").split("/")[0]] if _extra_frontend else []) + _extra_hosts
+    if not DEBUG and not TESTING and not _env_hosts:
+        import logging
+        logging.getLogger("django.security").warning("ALLOWED_HOSTS not set explicitly; using safe defaults")
 
 
 #CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
 #CORS_ALLOW_CREDENTIALS = os.getenv('CORS_ALLOW_CREDENTIALS', 'True' if DEBUG else 'False').lower() in ['true', '1', 'yes']
-
-_extra_frontend = os.getenv("FRONTEND_URL", "").strip()
-_extra_origins = [o.strip() for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -59,10 +66,9 @@ CORS_ALLOWED_ORIGINS = [
     "https://vetlinkfrontendkan-coikas6hd-mevs-me.vercel.app",
 ] + ([_extra_frontend] if _extra_frontend else []) + _extra_origins
 
-# Allow any Vercel preview deployment for this project
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://.*\.vercel\.app$",
-]
+# SECURITY: No wildcard Vercel regex in production. Previews must be added explicitly via CORS_EXTRA_ORIGINS.
+_preview_regex = os.getenv("CORS_ALLOW_VERCEL_PREVIEW", "false").lower() in ["true","1","yes"]
+CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://.*\.vercel\.app$"] if (DEBUG or _preview_regex) else []
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -81,11 +87,21 @@ SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False' if DEBUG else 'Tr
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False' if (DEBUG or TESTING) else 'True').lower() in ['true', '1', 'yes']
 SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
 CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
-SECURE_CONTENT_TYPE_NOSNIFF = os.getenv('SECURE_CONTENT_TYPE_NOSNIFF', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
-SECURE_BROWSER_XSS_FILTER = os.getenv('SECURE_BROWSER_XSS_FILTER', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
 SECURE_REFERRER_POLICY = os.getenv('SECURE_REFERRER_POLICY', 'strict-origin-when-cross-origin')
 X_FRAME_OPTIONS = os.getenv('X_FRAME_OPTIONS', 'DENY')
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# CSP via middleware header (report-only in DEBUG)
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "https://fonts.googleapis.com")
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://fonts.googleapis.com")
+CSP_IMG_SRC = ("'self'", "data:", "https:", "blob:")
+CSP_CONNECT_SRC = ("'self'", "https://vetlinkbackend.onrender.com", "https://*.vercel.app")
 
 # In production, the app should explicitly opt into permissive CORS and secure cookies.
 # Local development can use the default permissive settings without needing env vars.
@@ -222,6 +238,7 @@ if TESTING:
             "NAME": BASE_DIR / "test_mig.sqlite3",
         }
     }
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "vetlink-test-cache"}}
     # PBKDF2 with 720k iterations is needlessly slow for tests (a 10-minute
     # suite, mostly spent hashing passwords). MD5 is insecure for production
     # but fine for throwaway test users.
@@ -293,6 +310,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Django REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'apps.accounts.cookie_auth.JWTCookieAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
@@ -329,12 +347,14 @@ if TESTING:
         'auth': '100000/min',
     }
 
-# SimpleJWT Settings
+# SimpleJWT Settings — short-lived access to limit stolen-token window
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1) if not DEBUG else timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
+    'UPDATE_LAST_LOGIN': True,
 }
 
 # DRF Spectacular OpenAPI documentation settings
@@ -451,6 +471,11 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # ─── WhatsApp Bot ─────────────────────────────────────────────────────────────
-WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', 'console')  # console, twilio, africastalking
+# In production default to disabled unless explicitly set, to avoid console leak
+_wh_provider_default = 'console' if DEBUG or TESTING else 'disabled'
+WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', _wh_provider_default)  # console, twilio, africastalking, disabled
 WHATSAPP_VERIFY_TOKEN = os.getenv('WHATSAPP_VERIFY_TOKEN', 'vetlink_kano_verify')
 WHATSAPP_APP_SECRET = os.getenv('WHATSAPP_APP_SECRET', '')
+if not DEBUG and WHATSAPP_PROVIDER == 'console':
+    import logging as _lg
+    _lg.getLogger('django.security').warning("WHATSAPP_PROVIDER=console in production - WhatsApp chat will not deliver")

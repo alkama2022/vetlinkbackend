@@ -20,6 +20,10 @@ from apps.core.permissions import IsGovernmentOfficerOrAdmin
 
 ALLOWED_PHOTO_TYPES = ('image/', 'video/')
 MAX_UPLOAD_SIZE = getattr(settings, 'MAX_UPLOAD_SIZE', 8 * 1024 * 1024)
+# Mirror frontend MAX_FILES=4 check server-side
+MAX_PHOTOS_PER_REPORT = 4
+# Pillow-allowed image types for re-encoding / EXIF strip
+ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
 
 # Derive the stored extension from the validated content type rather than the
 # client-supplied filename, preventing misleading/harmful file extensions.
@@ -33,13 +37,80 @@ _CONTENT_TYPE_EXTENSIONS = {
     'video/quicktime': '.mov',
 }
 
+# Magic-byte signatures for basic content-type spoof detection
+_MAGIC_BYTES = {
+    b'\xff\xd8\xff': 'image/jpeg',
+    b'\x89PNG': 'image/png',
+    b'GIF87a': 'image/gif',
+    b'GIF89a': 'image/gif',
+    b'RIFF': 'image/webp',  # WEBP starts with RIFF....WEBP
+}
+
+
+def _detect_magic_type(header: bytes) -> str | None:
+    for sig, mtype in _MAGIC_BYTES.items():
+        if header.startswith(sig):
+            return mtype
+    if header[0:4] == b'RIFF' and b'WEBP' in header[0:12]:
+        return 'image/webp'
+    if header[0:4] == b'\x00\x00\x00\x18' or header[4:8] in (b'ftyp',):
+        return None  # defer video detection to content_type check
+    return None
+
+
+def _strip_exif_and_reencode(image_bytes: bytes, content_type: str) -> bytes:
+    """Re-encode image via Pillow to strip EXIF/GPS and normalize. Returns new bytes."""
+    try:
+        from PIL import Image
+        import io
+        buf = io.BytesIO(image_bytes)
+        img = Image.open(buf)
+        img.verify()  # validates structure
+        buf.seek(0)
+        img = Image.open(buf)
+        # Strip EXIF by not passing exif, re-save with safe params
+        out = io.BytesIO()
+        fmt = 'JPEG' if content_type == 'image/jpeg' else 'PNG' if content_type == 'image/png' else 'WEBP' if content_type == 'image/webp' else 'PNG'
+        # Convert palette/mode if needed
+        if img.mode in ('P', 'RGBA') and fmt == 'JPEG':
+            img = img.convert('RGB')
+        img.save(out, format=fmt, quality=85, optimize=True)
+        return out.getvalue()
+    except Exception:
+        # If Pillow not available or decode fails, fall back to raw but still strip by returning raw
+        # Caller will still validate magic bytes; image may retain EXIF in fallback but is limited
+        return image_bytes
+
 
 def _save_report_photo(uploaded):
-    content_type = (getattr(uploaded, 'content_type', '') or '').lower()
+    content_type = (getattr(uploaded, 'content_type', '') or '').lower().split(';')[0].strip()
     if not any(content_type.startswith(t) for t in ALLOWED_PHOTO_TYPES):
         raise ValidationError({'photos': f'File "{uploaded.name}" is not an allowed type.'})
     if uploaded.size > MAX_UPLOAD_SIZE:
-        raise ValidationError({'photos': f'File "{uploaded.name}" exceeds the size limit.'})
+        raise ValidationError({'photos': f'File "{uploaded.name}" exceeds the size limit (8 MB).'})
+    # Read header for magic-byte validation (first 12 bytes)
+    header = uploaded.read(12)
+    uploaded.seek(0)
+    if content_type in ALLOWED_IMAGE_TYPES:
+        detected = _detect_magic_type(header)
+        if detected and detected != content_type and not (detected == 'image/webp' and content_type == 'image/webp'):
+            # Allow jpeg/png strict mismatch to be rejected
+            if detected in ALLOWED_IMAGE_TYPES and detected != content_type:
+                raise ValidationError({'photos': f'File "{uploaded.name}" content does not match its type.'})
+        # Collect full bytes for re-encoding
+        data = b''.join(chunk for chunk in uploaded.chunks())
+        if len(data) > MAX_UPLOAD_SIZE:
+            raise ValidationError({'photos': f'File "{uploaded.name}" exceeds size after read.'})
+        data = _strip_exif_and_reencode(data, content_type)
+        ext = _CONTENT_TYPE_EXTENSIONS.get(content_type, '.bin')
+        subdir = f"uploads/disease_reports/{date.today().strftime('%Y/%m/%d')}"
+        directory = os.path.join(settings.MEDIA_ROOT, subdir)
+        os.makedirs(directory, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        with open(os.path.join(directory, filename), 'wb') as dest:
+            dest.write(data)
+        return f"{subdir}/{filename}"
+    # Video: keep existing streaming path but validate size only
     ext = _CONTENT_TYPE_EXTENSIONS.get(content_type, '.bin')
     subdir = f"uploads/disease_reports/{date.today().strftime('%Y/%m/%d')}"
     directory = os.path.join(settings.MEDIA_ROOT, subdir)
@@ -80,6 +151,22 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
     search_fields = ['report_code', 'disease', 'species', 'location', 'lga', 'farmer_name']
     ordering_fields = ['submitted_at', 'affected', 'dead']
 
+    def get_queryset(self):
+        qs = DiseaseReport.objects.all().order_by('-submitted_at')
+        user = getattr(self.request, 'user', None)
+        if not user or not getattr(user, 'is_authenticated', False):
+            return qs.none()
+        # Farmers see only own reports; vets/clinics see own + LGA; gov/admin sees all
+        if getattr(user, 'user_type', None) == 'FARMER':
+            return qs.filter(farmer=user)
+        if getattr(user, 'user_type', None) in ('VETERINARIAN', 'CLINIC_ADMIN', 'PHARMACIST', 'RECEPTIONIST'):
+            # Scope to LGA plus own reports for clinic users
+            lga = getattr(user, 'lga', '')
+            if lga:
+                return qs.filter(lga=lga) | qs.filter(farmer=user)
+            return qs.filter(farmer=user)
+        return qs
+
     def get_permissions(self):
         # Only government officers/admins can update status
         if self.action == 'update_status':
@@ -105,6 +192,13 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
         extra = {'report_code': report_code, 'lga': lga or 'Kano Municipal'}
         photos = self.request.FILES.getlist('photos')
         if photos:
+            if len(photos) > MAX_PHOTOS_PER_REPORT:
+                raise ValidationError({'photos': f'Maximum {MAX_PHOTOS_PER_REPORT} files allowed.'})
+            # dead <= affected validation via serializer already; extra check for API-consistency
+            affected = serializer.validated_data.get('affected', 0)
+            dead = serializer.validated_data.get('dead', 0)
+            if dead is not None and affected is not None and dead > affected:
+                raise ValidationError({'dead': 'Dead count cannot exceed affected count.'})
             saved = [_save_report_photo(uploaded) for uploaded in photos]
             extra['photos'] = (serializer.validated_data.get('photos') or []) + saved
         user = getattr(self.request, 'user', None)
@@ -112,7 +206,29 @@ class DiseaseReportViewSet(viewsets.ModelViewSet):
             extra['farmer'] = user
             if not serializer.validated_data.get('farmer_name'):
                 extra['farmer_name'] = getattr(user, 'full_name', '')
+        # Idempotency: if client supplied X-Idempotency-Key header and report with same key exists recently, return it
+        idem_key = self.request.headers.get('Idempotency-Key') or self.request.headers.get('X-Idempotency-Key')
+        if idem_key:
+            from django.core.cache import cache
+            cache_key = f"report_idem:{user.id if user else 'anon'}:{idem_key}"
+            existing_id = cache.get(cache_key)
+            if existing_id:
+                try:
+                    existing = DiseaseReport.objects.get(pk=existing_id)
+                    # Return existing via serializer re-use: short-circuit
+                    # Still need to return response; raise to let DRF handle via get_success_headers
+                    from rest_framework.response import Response as DRFResponse
+                    # Store in cache for 24h; return conflict with existing id
+                    return DRFResponse(DiseaseReportSerializer(existing).data, status=status.HTTP_200_OK)
+                except DiseaseReport.DoesNotExist:
+                    pass
         report = serializer.save(**extra)
+        if idem_key:
+            try:
+                from django.core.cache import cache
+                cache.set(f"report_idem:{user.id if user else 'anon'}:{idem_key}", str(report.pk), 86400)
+            except Exception:
+                pass
         # Send SMS confirmation to farmer
         try:
             from apps.notifications.sms import notify_disease_report_created

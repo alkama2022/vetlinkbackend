@@ -2,12 +2,12 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from apps.integrations.whatsapp import verify_whatsapp_webhook, handle_whatsapp_message
 
 from apps.accounts.views import (
     ChangePasswordView,
+    CookieTokenRefreshView,
     CustomTokenObtainPairView,
     ForgotPasswordView,
     LogoutView,
@@ -67,6 +67,7 @@ from apps.payments.views import (
     gateway_webhook,
     WithdrawalRequestViewSet,
     BankAccountViewSet,
+    RefundViewSet,
 )
 from apps.chat.views import ChatContactsView, ConversationViewSet, MessageViewSet
 from apps.monitoring.views import (
@@ -118,6 +119,7 @@ router.register(r'payments/wallet', WalletViewSet, basename='wallet')
 router.register(r'payments/invoices', PaymentInvoiceViewSet, basename='payments-invoice')
 router.register(r'payments/withdrawals', WithdrawalRequestViewSet, basename='withdrawal')
 router.register(r'payments/bank-accounts', BankAccountViewSet, basename='bank-account')
+router.register(r'payments/refunds', RefundViewSet, basename='refund')
 # NOTE: the generic 'payments' router must be registered LAST among the
 # payments routes, otherwise its <pk> pattern shadows the more specific
 # wallet/invoices/withdrawals/bank-accounts prefixes.
@@ -135,7 +137,7 @@ urlpatterns = [
     # Authentication Endpoints
     path('api/v1/auth/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/auth/vet-login/', VetLoginView.as_view(), name='vet_login'),
-    path('api/v1/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/v1/auth/token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
     path('api/v1/auth/register/', UserRegistrationView.as_view(), name='user_register'),
     path('api/v1/auth/me/', UserProfileView.as_view(), name='user_profile'),
     path('api/v1/auth/password/change/', ChangePasswordView.as_view(), name='change_password'),
