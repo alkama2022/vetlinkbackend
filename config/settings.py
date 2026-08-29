@@ -89,8 +89,14 @@ SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False' if DEBUG else
 CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False' if DEBUG else 'True').lower() in ['true', '1', 'yes']
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SAMESITE = "Lax"
+# Cross-site frontend (vercel.app -> onrender.com) needs SameSite=None in prod; Lax locally
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "None" if not DEBUG else "Lax")
+CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "None" if not DEBUG else "Lax")
+# None requires Secure, so force Secure when samesite is None even if DEBUG default would be False
+if SESSION_COOKIE_SAMESITE.lower() == "none":
+    SESSION_COOKIE_SECURE = True
+if CSRF_COOKIE_SAMESITE.lower() == "none":
+    CSRF_COOKIE_SECURE = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_REFERRER_POLICY = os.getenv('SECURE_REFERRER_POLICY', 'strict-origin-when-cross-origin')
