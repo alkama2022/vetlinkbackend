@@ -151,11 +151,13 @@ class VetLoginSerializer(serializers.Serializer):
     vet_code = serializers.CharField(required=True)
 
     def validate(self, attrs):
-        license_number = attrs.get('license_number')
-        vet_code = attrs.get('vet_code')
+        license_number = (attrs.get('license_number') or '').strip()
+        vet_code = (attrs.get('vet_code') or '').strip()
 
         from apps.veterinarians.models import VeterinarianProfile
-        vet = VeterinarianProfile.objects.filter(license_number=license_number, vet_code=vet_code).first()
+        vet = VeterinarianProfile.objects.filter(
+            license_number__iexact=license_number, vet_code__iexact=vet_code
+        ).first()
         
         if not vet:
             raise serializers.ValidationError('Invalid license number or vet code.')
@@ -178,6 +180,8 @@ class VetLoginSerializer(serializers.Serializer):
                 'user_type': vet.user.user_type,
                 'lga': vet.user.lga,
                 'phone_number': vet.user.phone_number,
+                'is_email_verified': vet.user.is_email_verified,
+                'is_active': vet.user.is_active,
             }
         }
 

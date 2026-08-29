@@ -136,6 +136,15 @@ class Command(BaseCommand):
                 'lga': 'Kano Municipal',
                 'is_email_verified': True,
             },
+            {
+                'email': 'amina@vetlink.com',
+                'full_name': 'Dr. Amina Yusuf',
+                'password': 'password123',
+                'user_type': 'VETERINARIAN',
+                'phone_number': '+2348055554444',
+                'lga': 'Kano Municipal',
+                'is_email_verified': True,
+            },
         ]
 
         created_users = {}
@@ -199,11 +208,13 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write("  [+] Created vet profile: VET001")
 
-        # Create a second vet profile
+        # Create a second vet profile (or fix orphan)
+        vet2_user = created_users.get('amina@vetlink.com')
         if vet_user:
             profile2, created = VeterinarianProfile.objects.get_or_create(
                 vet_code='VET002',
                 defaults={
+                    'user': vet2_user,
                     'full_name': 'Dr. Amina Yusuf',
                     'license_number': 'VCN/2018/7823',
                     'qualifications': 'DVM, Cert Veterinary Public Health',
@@ -231,6 +242,10 @@ class Command(BaseCommand):
             )
             if created:
                 self.stdout.write("  [+] Created vet profile: VET002")
+            elif profile2.user is None and vet2_user:
+                profile2.user = vet2_user
+                profile2.save(update_fields=['user'])
+                self.stdout.write("  [~] Fixed orphan vet profile VET002 -> linked to amina@vetlink.com")
 
         self._users = created_users
 
